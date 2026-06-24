@@ -180,12 +180,15 @@ function updateAvatar_(req) {
 
   const baseId = text_(req.baseId || req.avatarBaseId || req.avatar_base_id || rowText_(studentRow, "avatar_base_id") || "boy");
   const clothingId = text_(req.clothingId || req.clothingItemId || req.clothing_item_id || rowText_(studentRow, "clothing_item_id") || "basic");
+  const backgroundId = text_(req.backgroundId || req.backgroundItemId || req.background_item_id || rowText_(studentRow, "background_item_id") || "basic-bg");
   assertAvatarChoice_(baseId, "base", points);
   assertAvatarChoice_(clothingId, "clothing", points);
+  assertAvatarChoice_(backgroundId, "background", points);
 
   setRecordFields_("Students", studentRow.rowNumber, {
     avatar_base_id: baseId,
     clothing_item_id: clothingId,
+    background_item_id: backgroundId,
   });
 
   SpreadsheetApp.flush();
@@ -717,6 +720,7 @@ function studentForStudent_(record) {
     avatar: {
       baseId: text_(record.avatar_base_id || "boy"),
       clothingItemId: text_(record.clothing_item_id || "basic"),
+      backgroundItemId: text_(record.background_item_id || "basic-bg"),
     },
   };
 }
