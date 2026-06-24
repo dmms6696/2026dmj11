@@ -58,6 +58,7 @@ const avatarBackgrounds = [
   { id: "school-spring", name: "봄학교 배경", min: 220, desc: "220P부터 해제", asset: "school_spring" },
 ];
 
+const imageAssetVersion = "21";
 const avatarStorageKey = "classroomHqAvatarChoices";
 const profileStorageKey = "classroomHqStudentProfiles";
 const sessionStorageKey = "classroomHqSavedSession";
@@ -869,11 +870,11 @@ function nextAvatarMilestone(points) {
 
 function avatarImagePath(base, clothing) {
   const asset = clothing.asset ? `${base.id}-${clothing.asset}` : base.asset;
-  return `./assets/avatars/${asset}.png`;
+  return `./assets/avatars/${asset}.png?v=${imageAssetVersion}`;
 }
 
 function backgroundImagePath(background) {
-  return `./assets/backgrounds/${background.asset}.png`;
+  return `./assets/backgrounds/${background.asset}.png?v=${imageAssetVersion}`;
 }
 
 function avatarFigureMarkup(base, clothing, background = avatarBackgrounds[0]) {
