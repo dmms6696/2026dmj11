@@ -1,9 +1,9 @@
-const CACHE_NAME = "classroom-hq-v17";
+const CACHE_NAME = "classroom-hq-v20";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=17",
-  "./app.js?v=17",
+  "./styles.css?v=20",
+  "./app.js?v=20",
   "./manifest.json",
   "./icon.svg",
   "./assets/school-logo.png",
@@ -25,10 +25,18 @@ const ASSETS = [
   "./assets/avatars/girl-winter-pe.png",
   "./assets/avatars/boy-class-tee.png",
   "./assets/avatars/girl-class-tee.png",
+  "./assets/backgrounds/classroom.png",
+  "./assets/backgrounds/school_summer.png",
+  "./assets/backgrounds/library.png",
+  "./assets/backgrounds/school_fall.png",
+  "./assets/backgrounds/night.png",
+  "./assets/backgrounds/school_winter.png",
+  "./assets/backgrounds/school_spring.png",
 ];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(ASSETS)));
+  self.skipWaiting();
 });
 
 self.addEventListener("activate", (event) => {
@@ -36,6 +44,7 @@ self.addEventListener("activate", (event) => {
     caches
       .keys()
       .then((keys) => Promise.all(keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))))
+      .then(() => self.clients.claim())
   );
 });
 

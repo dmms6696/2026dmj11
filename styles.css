@@ -479,7 +479,19 @@ textarea:focus {
   width: 100%;
   height: 100%;
   display: block;
+  position: relative;
+  z-index: 1;
   object-fit: cover;
+}
+
+.avatar-background-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  z-index: 0;
 }
 
 .avatar-head {

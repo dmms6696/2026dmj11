@@ -47,9 +47,21 @@ const avatarClothing = [
   { id: "class-tee", name: "반티", min: 260, desc: "260P부터 해제", asset: "class-tee" },
 ];
 
+const avatarBackgrounds = [
+  { id: "basic-bg", name: "기본 배경", min: 0, desc: "처음부터 선택 가능", asset: null },
+  { id: "classroom", name: "교실 배경", min: 40, desc: "40P부터 해제", asset: "classroom" },
+  { id: "school-summer", name: "여름학교 배경", min: 70, desc: "70P부터 해제", asset: "school_summer" },
+  { id: "library", name: "도서관 배경", min: 100, desc: "100P부터 해제", asset: "library" },
+  { id: "school-fall", name: "가을학교 배경", min: 130, desc: "130P부터 해제", asset: "school_fall" },
+  { id: "night", name: "별밤 배경", min: 160, desc: "160P부터 해제", asset: "night" },
+  { id: "school-winter", name: "겨울학교 배경", min: 190, desc: "190P부터 해제", asset: "school_winter" },
+  { id: "school-spring", name: "봄학교 배경", min: 220, desc: "220P부터 해제", asset: "school_spring" },
+];
+
 const avatarStorageKey = "classroomHqAvatarChoices";
 const profileStorageKey = "classroomHqStudentProfiles";
 const sessionStorageKey = "classroomHqSavedSession";
+const sessionPayloadStorageKey = "classroomHqCachedSessionPayloads";
 const API_URL = "https://script.google.com/macros/s/AKfycbw0S2YHTyVvmOqAvij_KNZ_XjcqMiXuJ7pA_r5aTfGZYH6HxLk_D52qADRCJwSKMfs/exec";
 const studentListLoadingText = "\uBA85\uB2E8\uC744 \uBD88\uB7EC\uC624\uB294 \uC911...";
 const studentListErrorText = "\uBA85\uB2E8\uC744 \uBD88\uB7EC\uC624\uC9C0 \uBABB\uD588\uC2B5\uB2C8\uB2E4";
@@ -63,6 +75,7 @@ students.forEach((student, index) => {
   student.avatar = {
     base: normalizeBase(saved?.base, index),
     clothing: normalizeClothing(saved?.clothing || migrateClothing(saved?.upgrade)),
+    background: normalizeBackground(saved?.background),
   };
 });
 
@@ -111,6 +124,11 @@ function normalizeClothing(clothingId) {
   };
   const nextId = migration[clothingId] || clothingId || "basic";
   return avatarClothing.some((item) => item.id === nextId) ? nextId : "basic";
+}
+
+function normalizeBackground(backgroundId) {
+  const nextId = backgroundId || "basic-bg";
+  return avatarBackgrounds.some((item) => item.id === nextId) ? nextId : "basic-bg";
 }
 
 function loadAvatarChoices() {
@@ -173,8 +191,40 @@ function saveSession(role, token, studentId = "") {
 function clearSavedSession() {
   try {
     localStorage.removeItem(sessionStorageKey);
+    localStorage.removeItem(sessionPayloadStorageKey);
   } catch {
     // 저장소 접근이 막힌 환경이면 앱 상태만 정리합니다.
+  }
+}
+
+function sessionPayloadKey(role, studentId = "") {
+  return role === "teacher" ? "teacher" : `student:${studentId || "unknown"}`;
+}
+
+function loadSessionPayloads() {
+  try {
+    return JSON.parse(localStorage.getItem(sessionPayloadStorageKey) || "{}");
+  } catch {
+    return {};
+  }
+}
+
+function loadSessionPayload(role, studentId = "") {
+  const payloads = loadSessionPayloads();
+  return payloads[sessionPayloadKey(role, studentId)]?.payload || null;
+}
+
+function saveSessionPayload(role, studentId, payload) {
+  if (!payload) return;
+  try {
+    const payloads = loadSessionPayloads();
+    payloads[sessionPayloadKey(role, studentId)] = {
+      payload,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(sessionPayloadStorageKey, JSON.stringify(payloads));
+  } catch {
+    // 화면 캐시는 속도 보조 기능이라 실패해도 앱 사용은 계속됩니다.
   }
 }
 
@@ -191,6 +241,11 @@ function showToast(message) {
   toast.classList.add("is-visible");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => toast.classList.remove("is-visible"), 1800);
+}
+
+function isSessionError(error) {
+  const message = String(error?.message || "");
+  return /session|token|expired|forbidden|auth_required|로그인|만료/i.test(message);
 }
 
 async function apiRequest(action, payload = {}) {
@@ -222,8 +277,9 @@ function apiStudentToLocal(student, fallbackIndex = 0) {
     level: student.level || "Lv.1",
     title: student.title || "",
     avatar: {
-      base: student.avatar?.baseId || "boy",
-      clothing: student.avatar?.clothingItemId || "basic",
+      base: normalizeBase(student.avatar?.baseId, fallbackIndex),
+      clothing: normalizeClothing(student.avatar?.clothingItemId),
+      background: normalizeBackground(student.avatar?.backgroundItemId),
     },
   };
 }
@@ -376,6 +432,9 @@ function applyStudentPayload(home) {
   }
 
   state.apiReady = true;
+  if (state.apiToken) {
+    saveSessionPayload("student", state.apiStudentId || home.student?.studentId || "", home);
+  }
 }
 
 function applyTeacherPayload(dashboard) {
@@ -398,6 +457,9 @@ function applyTeacherPayload(dashboard) {
     syncClassGoalFields();
   }
   state.apiReady = true;
+  if (state.apiToken) {
+    saveSessionPayload("teacher", "", dashboard);
+  }
 }
 
 async function loadPublicData() {
@@ -423,11 +485,26 @@ async function restoreSavedSession() {
     return false;
   }
 
-  try {
-    state.role = saved.role;
-    state.apiToken = saved.token;
-    state.apiStudentId = saved.studentId || "";
+  let usedCachedPayload = false;
+  const cachedPayload = loadSessionPayload(saved.role, saved.studentId || "");
+  state.role = saved.role;
+  state.apiToken = saved.token;
+  state.apiStudentId = saved.studentId || "";
 
+  if (cachedPayload) {
+    if (saved.role === "teacher") {
+      applyTeacherPayload(cachedPayload);
+    } else {
+      applyStudentPayload(cachedPayload);
+    }
+    setLoginRole(saved.role);
+    setScreen("main");
+    setTab("home");
+    renderAll();
+    usedCachedPayload = true;
+  }
+
+  try {
     if (saved.role === "teacher") {
       const dashboard = await apiRequest("getTeacherDashboard", { token: saved.token });
       applyTeacherPayload(dashboard);
@@ -443,9 +520,15 @@ async function restoreSavedSession() {
     renderAll();
     return true;
   } catch (error) {
+    if (usedCachedPayload && !isSessionError(error)) {
+      showToast("저장된 화면을 먼저 보여주고 있어요. 최신 데이터 갱신은 다시 시도됩니다.");
+      return true;
+    }
+
     clearSavedSession();
     state.apiToken = "";
     state.apiStudentId = "";
+    setScreen("login");
     showToast("로그인 정보가 만료되어 다시 로그인해 주세요.");
     return false;
   }
@@ -736,12 +819,12 @@ function renderLeaderboard() {
   visibleRows.forEach((student) => {
     const rank = ranked.findIndex((item) => item.index === student.index) + 1;
     const isMe = student.index === state.activeStudent;
-    const { base, clothing } = getAvatarParts(student);
+    const { base, clothing, background } = getAvatarParts(student);
     const row = document.createElement("article");
     row.className = `leaderboard-row ${isMe ? "is-me" : ""}`;
     row.innerHTML = `
       <span class="rank-number">${rank}</span>
-      <div class="leader-avatar" aria-hidden="true">${avatarFigureMarkup(base, clothing)}</div>
+      <div class="leader-avatar" aria-hidden="true">${avatarFigureMarkup(base, clothing, background)}</div>
       <div class="leader-info">
         <strong>${escapeHtml(student.name)}${isMe ? " · 나" : ""}</strong>
         <small>${escapeHtml(student.title)}</small>
@@ -755,6 +838,7 @@ function renderLeaderboard() {
 function getAvatarParts(student) {
   const base = avatarBases.find((item) => item.id === student.avatar.base) || avatarBases[0];
   let clothing = avatarClothing.find((item) => item.id === student.avatar.clothing) || avatarClothing[0];
+  let background = avatarBackgrounds.find((item) => item.id === student.avatar.background) || avatarBackgrounds[0];
 
   if (clothing.min > student.points) {
     student.avatar.clothing = "basic";
@@ -762,7 +846,13 @@ function getAvatarParts(student) {
     saveAvatarChoices();
   }
 
-  return { base, clothing };
+  if (background.min > student.points) {
+    student.avatar.background = "basic-bg";
+    background = avatarBackgrounds[0];
+    saveAvatarChoices();
+  }
+
+  return { base, clothing, background };
 }
 
 function unlockedItems(items, points) {
@@ -770,7 +860,7 @@ function unlockedItems(items, points) {
 }
 
 function rewardItems() {
-  return avatarClothing.filter((item) => item.min > 0).sort((a, b) => a.min - b.min);
+  return [...avatarBackgrounds, ...avatarClothing].filter((item) => item.min > 0).sort((a, b) => a.min - b.min);
 }
 
 function nextAvatarMilestone(points) {
@@ -782,9 +872,17 @@ function avatarImagePath(base, clothing) {
   return `./assets/avatars/${asset}.png`;
 }
 
-function avatarFigureMarkup(base, clothing) {
+function backgroundImagePath(background) {
+  return `./assets/backgrounds/${background.asset}.png`;
+}
+
+function avatarFigureMarkup(base, clothing, background = avatarBackgrounds[0]) {
+  const backgroundMarkup = background.asset
+    ? `<img class="avatar-background-image" src="${backgroundImagePath(background)}" alt="" loading="lazy" />`
+    : "";
   return `
-    <div class="avatar-figure clothing-${clothing.id}">
+    <div class="avatar-figure clothing-${clothing.id} background-${background.id}">
+      ${backgroundMarkup}
       <img class="avatar-image" src="${avatarImagePath(base, clothing)}" alt="" loading="lazy" />
     </div>
   `;
@@ -794,28 +892,31 @@ function renderAvatar(selector, student) {
   const stage = qs(selector);
   if (!stage) return;
 
-  const { base, clothing } = getAvatarParts(student);
-  stage.innerHTML = avatarFigureMarkup(base, clothing);
+  const { base, clothing, background } = getAvatarParts(student);
+  stage.innerHTML = avatarFigureMarkup(base, clothing, background);
 }
 
 function renderAvatarWorkshop() {
   const student = students[state.activeStudent];
-  const { base, clothing } = getAvatarParts(student);
+  const { base, clothing, background } = getAvatarParts(student);
   const baseCount = avatarBases.length;
   const unlockedClothing = unlockedItems(avatarClothing, student.points);
+  const unlockedBackgrounds = unlockedItems(avatarBackgrounds, student.points);
   const next = nextAvatarMilestone(student.points);
 
   qs("#baseUnlockLabel").textContent = `${baseCount}개 선택 가능`;
   qs("#clothingUnlockLabel").textContent = `${unlockedClothing.length}/${avatarClothing.length}개 해제`;
+  qs("#backgroundUnlockLabel").textContent = `${unlockedBackgrounds.length}/${avatarBackgrounds.length}개 해제`;
   qs("#avatarMilestoneText").textContent = next
     ? `${next.name}까지 ${next.min - student.points}P 남음`
     : "모든 꾸미기 보상 해제";
   renderAvatar("#avatarPreview", student);
-  renderItemList("#baseList", avatarBases, base.id, "base", student.points, base, clothing);
-  renderItemList("#clothingList", avatarClothing, clothing.id, "clothing", student.points, base, clothing);
+  renderItemList("#baseList", avatarBases, base.id, "base", student.points, base, clothing, background);
+  renderItemList("#clothingList", avatarClothing, clothing.id, "clothing", student.points, base, clothing, background);
+  renderItemList("#backgroundList", avatarBackgrounds, background.id, "background", student.points, base, clothing, background);
 }
 
-function renderItemList(selector, items, selectedId, category, points, base, clothing) {
+function renderItemList(selector, items, selectedId, category, points, base, clothing, background) {
   const list = qs(selector);
   if (!list) return;
 
@@ -823,10 +924,12 @@ function renderItemList(selector, items, selectedId, category, points, base, clo
   items.forEach((item) => {
     const isUnlocked = (item.min || 0) <= points;
     const isSelected = item.id === selectedId;
-    const preview =
-      category === "base"
-        ? avatarFigureMarkup(item, clothing)
-        : avatarFigureMarkup(base, item);
+    let preview = avatarFigureMarkup(base, clothing, item);
+    if (category === "base") {
+      preview = avatarFigureMarkup(item, clothing, background);
+    } else if (category === "clothing") {
+      preview = avatarFigureMarkup(base, item, background);
+    }
     const option = document.createElement("button");
     option.type = "button";
     option.className = `item-option ${isSelected ? "is-selected" : ""} ${isUnlocked ? "" : "is-locked"}`;
@@ -1425,7 +1528,12 @@ async function handleAvatarItemSelect(event) {
 
   const student = students[state.activeStudent];
   const category = button.dataset.avatarCategory;
-  const items = category === "base" ? avatarBases : avatarClothing;
+  const itemsByCategory = {
+    base: avatarBases,
+    clothing: avatarClothing,
+    background: avatarBackgrounds,
+  };
+  const items = itemsByCategory[category] || [];
   const item = items.find((entry) => entry.id === button.dataset.avatarItem);
   if (!item) return;
 
@@ -1438,6 +1546,7 @@ async function handleAvatarItemSelect(event) {
     const nextAvatar = {
       baseId: category === "base" ? item.id : student.avatar.base,
       clothingId: category === "clothing" ? item.id : student.avatar.clothing,
+      backgroundId: category === "background" ? item.id : student.avatar.background,
     };
     try {
       const home = await apiRequest("updateAvatar", {
@@ -1458,6 +1567,8 @@ async function handleAvatarItemSelect(event) {
     student.avatar.base = item.id;
   } else if (category === "clothing") {
     student.avatar.clothing = item.id;
+  } else if (category === "background") {
+    student.avatar.background = item.id;
   }
   saveAvatarChoices();
   renderAll();
@@ -1466,6 +1577,7 @@ async function handleAvatarItemSelect(event) {
 
 qs("#baseList").addEventListener("click", handleAvatarItemSelect);
 qs("#clothingList").addEventListener("click", handleAvatarItemSelect);
+qs("#backgroundList").addEventListener("click", handleAvatarItemSelect);
 
 installNetworkLock();
 
