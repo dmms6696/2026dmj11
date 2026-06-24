@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>동명중 1-1</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./styles.css?v=16" />
+    <link rel="stylesheet" href="./styles.css?v=17" />
   </head>
   <body>
     <div class="app-frame" id="app">
@@ -138,10 +138,10 @@
               <article class="today-card teacher">
                 <div>
                   <p class="eyebrow">관리자</p>
-                  <h3>15명 중 오늘 접속 11명</h3>
+                  <h3>등록 학생 <b id="teacherStudentCount">0</b>명</h3>
                 </div>
                 <div class="level-badge">
-                  <span>+34</span>
+                  <span id="teacherTodayPoints">0</span>
                   <small>오늘 포인트</small>
                 </div>
               </article>
@@ -174,7 +174,7 @@
                   <span class="quiet-label">실시간</span>
                 </div>
                 <div class="activity-list">
-                  <p><b>학급</b> 활동 기록을 불러오는 중</p>
+                  <p id="teacherRecentActivity"><b>학급</b> 최근 활동 기록이 없습니다.</p>
                 </div>
               </article>
             </div>
@@ -412,6 +412,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=16"></script>
+    <script src="./app.js?v=17"></script>
   </body>
 </html>

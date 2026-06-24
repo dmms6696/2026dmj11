@@ -77,6 +77,7 @@ let state = {
   studentListStatus: "loading",
   notices: [],
   history: [],
+  pointLogs: [],
   polls: [],
   classGoal: null,
 };
@@ -313,6 +314,15 @@ function pollParticipationCount(poll) {
   return poll.options.reduce((sum, option) => sum + Number(option.count || 0), 0);
 }
 
+function pointLogFromApi(entry) {
+  return {
+    studentId: entry.studentId || "",
+    reason: entry.reason || "",
+    amount: Number(entry.pointsDelta || 0),
+    date: entry.createdAt || "",
+  };
+}
+
 function classGoalFromApi(goal) {
   if (!goal) return null;
 
@@ -379,6 +389,9 @@ function applyTeacherPayload(dashboard) {
   }
   if (Array.isArray(dashboard.surveys)) {
     state.polls = dashboard.surveys.map(pollFromApi);
+  }
+  if (Array.isArray(dashboard.pointLogs)) {
+    state.pointLogs = dashboard.pointLogs.map(pointLogFromApi);
   }
   if (Object.prototype.hasOwnProperty.call(dashboard, "classGoal")) {
     state.classGoal = classGoalFromApi(dashboard.classGoal);
@@ -527,6 +540,11 @@ function visibleNotices() {
 
 function renderHome() {
   const student = students[state.activeStudent];
+  if (state.role === "teacher") {
+    renderTeacherHome();
+    return;
+  }
+
   qs("#studentName").textContent = student.name;
   qs("#homePoints").textContent = student.points;
   qs("#pointsTotal").textContent = student.points;
@@ -556,6 +574,22 @@ function renderHome() {
 
   renderHomePollPreview();
   renderClassGoal();
+}
+
+function renderTeacherHome() {
+  const totalStudents = students.length;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayPoints = state.pointLogs
+    .filter((entry) => entry.date.startsWith(todayKey))
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const latest = state.pointLogs[0];
+  const latestStudent = latest ? students.find((student) => student.studentId === latest.studentId) : null;
+
+  qs("#teacherStudentCount").textContent = totalStudents;
+  qs("#teacherTodayPoints").textContent = formatPointDelta(todayPoints);
+  qs("#teacherRecentActivity").innerHTML = latest
+    ? `<b>${escapeHtml(latestStudent?.name || "학급")}</b> ${escapeHtml(latest.reason)} ${formatPointDelta(latest.amount)}`
+    : "<b>학급</b> 최근 활동 기록이 없습니다.";
 }
 
 function renderHomePollPreview() {
