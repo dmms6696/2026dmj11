@@ -1116,6 +1116,83 @@ textarea:focus {
   gap: 8px;
 }
 
+.poll-result-list,
+.survey-result-list {
+  display: grid;
+  gap: 10px;
+}
+
+.result-option,
+.text-result,
+.empty-result {
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f7fbf8;
+}
+
+.result-option {
+  display: grid;
+  gap: 8px;
+}
+
+.result-option-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.result-option-head strong,
+.text-result strong {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.35;
+}
+
+.result-option-head span {
+  color: var(--teal-dark);
+  font-size: 12px;
+  font-weight: 1000;
+  white-space: nowrap;
+}
+
+.result-option > i {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #e1ebe5;
+}
+
+.result-option > i::before {
+  content: "";
+  display: block;
+  width: var(--value, 0%);
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--teal), var(--gold));
+}
+
+.text-result {
+  display: grid;
+  gap: 5px;
+}
+
+.text-result p,
+.empty-result {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.text-result small {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+}
+
 .poll-options-field.is-hidden {
   display: none;
 }

@@ -343,7 +343,13 @@ function pollFromApi(survey) {
       type: "text",
       question: survey.question || "",
       closes: survey.closesAt || "진행 중",
-      responses,
+      status: survey.status || "",
+      responseCount: Number(survey.responseCount || responses.length || 0),
+      responses: responses.map((response, index) => ({
+        ...response,
+        studentName: survey.responses?.[index]?.studentName || students[response.student]?.name || "",
+        updatedAt: survey.responses?.[index]?.updatedAt || "",
+      })),
     };
   }
 
@@ -358,6 +364,8 @@ function pollFromApi(survey) {
     type: "choice",
     question: survey.question || "",
     closes: survey.closesAt || "진행 중",
+    status: survey.status || "",
+    responseCount: Number(survey.responseCount || 0),
     allowEdit: survey.allowEdit !== false,
     options,
     selected: selected >= 0 ? selected : null,
@@ -372,6 +380,9 @@ function formatPointDelta(amount) {
 
 function pollParticipationCount(poll) {
   if (!poll) return 0;
+  if (Number.isFinite(Number(poll.responseCount)) && Number(poll.responseCount) > 0) {
+    return Number(poll.responseCount);
+  }
   if (poll.type === "text") return poll.responses.length;
   return poll.options.reduce((sum, option) => sum + Number(option.count || 0), 0);
 }
@@ -966,6 +977,11 @@ function renderItemList(selector, items, selectedId, category, points, base, clo
 function renderPolls() {
   const list = qs("#pollList");
   list.innerHTML = "";
+  if (state.role === "teacher") {
+    renderTeacherPollResults(list);
+    return;
+  }
+
   state.polls.forEach((poll, pollIndex) => {
     const isTextSurvey = poll.type === "text";
     const total = pollParticipationCount(poll);
@@ -1011,6 +1027,83 @@ function renderPolls() {
       });
     }
     list.appendChild(card);
+  });
+}
+
+function renderTeacherPollResults(list) {
+  if (!state.polls.length) {
+    const empty = document.createElement("article");
+    empty.className = "poll-card";
+    empty.innerHTML = "<p>아직 생성된 설문이 없습니다.</p>";
+    list.appendChild(empty);
+    return;
+  }
+
+  state.polls.forEach((poll) => {
+    const isTextSurvey = poll.type === "text";
+    const total = pollParticipationCount(poll);
+    const card = document.createElement("article");
+    card.className = "poll-card teacher-result-card";
+    card.innerHTML = `
+      <header>
+        <div>
+          <h3>${escapeHtml(poll.question)}</h3>
+          <span class="notice-meta">${escapeHtml(poll.closes || "진행 중")}</span>
+        </div>
+        <span class="badge">${isTextSurvey ? "주관식" : "투표"} · ${total}명</span>
+      </header>
+      <div class="${isTextSurvey ? "survey-result-list" : "poll-result-list"}"></div>
+    `;
+
+    if (isTextSurvey) {
+      renderTextSurveyResults(card.querySelector(".survey-result-list"), poll);
+    } else {
+      renderChoicePollResults(card.querySelector(".poll-result-list"), poll, total);
+    }
+
+    list.appendChild(card);
+  });
+}
+
+function renderChoicePollResults(container, poll, total) {
+  if (!poll.options.length) {
+    container.innerHTML = '<p class="empty-result">선택지가 없습니다.</p>';
+    return;
+  }
+
+  poll.options.forEach((option) => {
+    const count = Number(option.count || 0);
+    const percent = total ? Math.round((count / total) * 100) : 0;
+    const row = document.createElement("article");
+    row.className = "result-option";
+    row.innerHTML = `
+      <div class="result-option-head">
+        <strong>${escapeHtml(option.text)}</strong>
+        <span>${count}표 · ${percent}%</span>
+      </div>
+      <i aria-hidden="true" style="--value: ${percent}%"></i>
+    `;
+    container.appendChild(row);
+  });
+}
+
+function renderTextSurveyResults(container, poll) {
+  const responses = poll.responses || [];
+  if (!responses.length) {
+    container.innerHTML = '<p class="empty-result">아직 제출된 응답이 없습니다.</p>';
+    return;
+  }
+
+  responses.forEach((response) => {
+    const item = document.createElement("article");
+    item.className = "text-result";
+    const studentName = response.studentName || students[response.student]?.name || "학생";
+    item.innerHTML = `
+      <strong>${escapeHtml(studentName)}</strong>
+      <p>${escapeHtml(response.text)}</p>
+      ${response.updatedAt ? `<small>${escapeHtml(response.updatedAt)}</small>` : ""}
+    `;
+    container.appendChild(item);
   });
 }
 
