@@ -331,8 +331,7 @@ textarea:focus {
 .teacher-home,
 .app-frame.teacher-mode .student-home,
 .app-frame.teacher-mode [data-tab-target="points"],
-.app-frame.teacher-mode [data-tab-target="avatar"],
-.app-frame.teacher-mode [data-tab-target="polls"] {
+.app-frame.teacher-mode [data-tab-target="avatar"] {
   display: none;
 }
 
