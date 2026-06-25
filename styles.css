@@ -1148,6 +1148,11 @@ textarea:focus {
   background: #eaf9f4;
 }
 
+.option-button:disabled {
+  cursor: wait;
+  opacity: 0.68;
+}
+
 .option-count {
   color: var(--muted);
   font-size: 12px;

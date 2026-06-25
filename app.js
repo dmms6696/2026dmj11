@@ -309,13 +309,16 @@ function studentIndexById(studentId) {
 }
 
 function noticeFromApi(notice) {
+  const targetIndex = notice.targetStudentId ? studentIndexById(notice.targetStudentId) : null;
   return {
     noticeId: notice.noticeId,
     scope: notice.scope || "class",
     title: notice.title || "",
     body: notice.body || "",
     time: notice.publishAt || "",
-    target: notice.targetStudentId ? studentIndexById(notice.targetStudentId) : null,
+    target: targetIndex,
+    targetStudentId: notice.targetStudentId || "",
+    targetName: notice.targetStudentName || (targetIndex !== null && targetIndex >= 0 ? students[targetIndex]?.name : ""),
     unread: true,
   };
 }
@@ -355,8 +358,10 @@ function pollFromApi(survey) {
     type: "choice",
     question: survey.question || "",
     closes: survey.closesAt || "진행 중",
+    allowEdit: survey.allowEdit !== false,
     options,
     selected: selected >= 0 ? selected : null,
+    isSubmitting: false,
   };
 }
 
@@ -720,11 +725,21 @@ function createNoticeItem(notice) {
   const item = document.createElement("article");
   item.className = "notice-item";
   item.innerHTML = `
-    <span class="notice-meta"><i class="scope-dot ${notice.scope}"></i>${labels[notice.scope]} · ${notice.time}</span>
+    <span class="notice-meta"><i class="scope-dot ${notice.scope}"></i>${noticeMetaText(notice)}</span>
     <strong>${escapeHtml(notice.title)}</strong>
     <p>${escapeHtml(notice.body)}</p>
   `;
   return item;
+}
+
+function privateNoticeTargetText(notice) {
+  if (notice.scope !== "private" || state.role !== "teacher") return "";
+  const targetName = notice.targetName || students[notice.target]?.name || notice.targetStudentId || "대상 미지정";
+  return ` · 대상 ${targetName}`;
+}
+
+function noticeMetaText(notice) {
+  return `${labels[notice.scope] || "공지"}${privateNoticeTargetText(notice)} · ${notice.time}`;
 }
 
 function renderNotices() {
@@ -747,7 +762,7 @@ function renderNotices() {
       <header>
         <div>
           <h3>${escapeHtml(notice.title)}</h3>
-          <span class="notice-meta">${notice.time}</span>
+          <span class="notice-meta">${notice.time}${privateNoticeTargetText(notice)}</span>
         </div>
         <span class="badge ${notice.scope}">${labels[notice.scope]}</span>
       </header>
@@ -984,6 +999,7 @@ function renderPolls() {
         const button = document.createElement("button");
         button.type = "button";
         button.className = `option-button ${poll.selected === optionIndex ? "is-selected" : ""}`;
+        button.disabled = Boolean(poll.isSubmitting);
         button.dataset.pollIndex = pollIndex;
         button.dataset.optionIndex = optionIndex;
         button.dataset.optionId = option.optionId || "";
@@ -1137,6 +1153,7 @@ async function addNotice() {
     body,
     time: "방금",
     target: scope === "private" ? Number(qs("#noticeTarget").value) : null,
+    targetName: scope === "private" ? students[Number(qs("#noticeTarget").value)]?.name || "" : "",
     unread: true,
   });
   renderAll();
@@ -1305,6 +1322,7 @@ async function addPoll() {
           closes: "진행 중",
           options: options.map((text) => ({ text, count: 0 })),
           selected: null,
+          isSubmitting: false,
         };
 
   state.polls.unshift(newPoll);
@@ -1497,7 +1515,16 @@ qs("#pollList").addEventListener("click", async (event) => {
   const optionIndex = Number(button.dataset.optionIndex);
   const poll = state.polls[pollIndex];
   const optionId = button.dataset.optionId;
+  if (!poll || poll.isSubmitting) return;
+
+  if (poll.selected === optionIndex) {
+    showToast("이미 선택한 항목입니다.");
+    return;
+  }
+
   if (state.apiToken && poll?.id && optionId) {
+    poll.isSubmitting = true;
+    renderPolls();
     try {
       const home = await apiRequest("submitSurveyResponse", {
         token: state.apiToken,
@@ -1509,6 +1536,8 @@ qs("#pollList").addEventListener("click", async (event) => {
       showToast("응답 저장 완료");
       return;
     } catch (error) {
+      poll.isSubmitting = false;
+      renderPolls();
       showToast(error.message || "응답 저장에 실패했습니다.");
       return;
     }
