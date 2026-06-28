@@ -94,6 +94,10 @@ let state = {
   pointLogs: [],
   polls: [],
   classGoal: null,
+  gallery: null,
+  galleryStatus: "idle",
+  galleryError: "",
+  galleryActiveAlbumId: "",
 };
 
 const app = document.querySelector("#app");
@@ -378,6 +382,20 @@ function formatPointDelta(amount) {
   return `${value > 0 ? "+" : ""}${value}P`;
 }
 
+function todayDateKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function comparePointLogDesc(a, b) {
+  const byDate = String(b?.date || "").localeCompare(String(a?.date || ""));
+  if (byDate) return byDate;
+  return Number(b?.rowNumber || 0) - Number(a?.rowNumber || 0);
+}
+
 function pollParticipationCount(poll) {
   if (!poll) return 0;
   if (Number.isFinite(Number(poll.responseCount)) && Number(poll.responseCount) > 0) {
@@ -387,12 +405,40 @@ function pollParticipationCount(poll) {
   return poll.options.reduce((sum, option) => sum + Number(option.count || 0), 0);
 }
 
+function pollParticipationLabel(poll) {
+  return `${pollParticipationCount(poll)}${poll?.type === "text" ? "건" : "명"}`;
+}
+
 function pointLogFromApi(entry) {
   return {
+    rowNumber: Number(entry.rowNumber || 0),
     studentId: entry.studentId || "",
     reason: entry.reason || "",
     amount: Number(entry.pointsDelta || 0),
     date: entry.createdAt || "",
+  };
+}
+
+function galleryFromApi(gallery) {
+  return {
+    warning:
+      gallery?.warning ||
+      "이 갤러리의 사진은 동명중 1-1 학급 구성원만 보기 위한 자료입니다. 사진을 저장, 캡처, 외부 공유하지 말아 주세요.",
+    rootFolderName: gallery?.rootFolderName || "우리반 갤러리",
+    updatedAt: gallery?.updatedAt || "",
+    albums: (gallery?.albums || []).map((album) => ({
+      id: album.albumId || "",
+      title: album.title || "앨범",
+      photoCount: Number(album.photoCount || album.photos?.length || 0),
+      coverUrl: album.coverUrl || "",
+      photos: (album.photos || []).map((photo) => ({
+        id: photo.photoId || "",
+        title: photo.title || "사진",
+        thumbnailUrl: photo.thumbnailUrl || "",
+        imageUrl: photo.imageUrl || photo.thumbnailUrl || "",
+        createdAt: photo.createdAt || "",
+      })),
+    })),
   };
 }
 
@@ -467,7 +513,7 @@ function applyTeacherPayload(dashboard) {
     state.polls = dashboard.surveys.map(pollFromApi);
   }
   if (Array.isArray(dashboard.pointLogs)) {
-    state.pointLogs = dashboard.pointLogs.map(pointLogFromApi);
+    state.pointLogs = dashboard.pointLogs.map(pointLogFromApi).sort(comparePointLogDesc);
   }
   if (Object.prototype.hasOwnProperty.call(dashboard, "classGoal")) {
     state.classGoal = classGoalFromApi(dashboard.classGoal);
@@ -625,8 +671,13 @@ function setTab(tab) {
       points: "포인트",
       avatar: "꾸미기",
       polls: "설문",
+      gallery: "갤러리",
       admin: "관리",
     }[tab] || "홈";
+  if (tab === "gallery") {
+    renderGallery();
+    maybeLoadGallery();
+  }
 }
 
 function visibleNotices() {
@@ -678,7 +729,7 @@ function renderHome() {
 
 function renderTeacherHome() {
   const totalStudents = students.length;
-  const todayKey = new Date().toISOString().slice(0, 10);
+  const todayKey = todayDateKey();
   const todayPoints = state.pointLogs
     .filter((entry) => entry.date.startsWith(todayKey))
     .reduce((sum, entry) => sum + entry.amount, 0);
@@ -708,7 +759,7 @@ function renderHomePollPreview() {
 
   preview.disabled = false;
   title.textContent = poll.question;
-  status.textContent = `${pollParticipationCount(poll)}명 참여`;
+  status.textContent = `${pollParticipationLabel(poll)} ${poll.type === "text" ? "제출" : "참여"}`;
 }
 
 function renderClassGoal() {
@@ -985,9 +1036,6 @@ function renderPolls() {
   state.polls.forEach((poll, pollIndex) => {
     const isTextSurvey = poll.type === "text";
     const total = pollParticipationCount(poll);
-    const studentResponse = isTextSurvey
-      ? poll.responses.find((response) => response.student === state.activeStudent)?.text || ""
-      : "";
     const card = document.createElement("article");
     card.className = "poll-card";
     card.innerHTML = `
@@ -996,7 +1044,7 @@ function renderPolls() {
           <h3>${escapeHtml(poll.question)}</h3>
           <span class="notice-meta">${poll.closes}</span>
         </div>
-        <span class="badge">${isTextSurvey ? "주관식" : "투표"} · ${total}명</span>
+        <span class="badge">${isTextSurvey ? "주관식" : "투표"} · ${pollParticipationLabel(poll)}</span>
       </header>
       <div class="${isTextSurvey ? "survey-response" : "poll-options"}"></div>
     `;
@@ -1004,9 +1052,9 @@ function renderPolls() {
     if (isTextSurvey) {
       const responseArea = card.querySelector(".survey-response");
       responseArea.innerHTML = `
-        <textarea class="survey-textarea" rows="4" data-poll-index="${pollIndex}" placeholder="내 생각을 적어 주세요.">${escapeHtml(studentResponse)}</textarea>
+        <textarea class="survey-textarea" rows="4" data-poll-index="${pollIndex}" placeholder="내 생각을 적어 주세요."></textarea>
         <button class="secondary-action survey-submit" type="button" data-poll-index="${pollIndex}">
-          ${studentResponse ? "응답 수정" : "응답 제출"}
+          응답 추가
         </button>
       `;
     } else {
@@ -1050,7 +1098,7 @@ function renderTeacherPollResults(list) {
           <h3>${escapeHtml(poll.question)}</h3>
           <span class="notice-meta">${escapeHtml(poll.closes || "진행 중")}</span>
         </div>
-        <span class="badge">${isTextSurvey ? "주관식" : "투표"} · ${total}명</span>
+        <span class="badge">${isTextSurvey ? "주관식" : "투표"} · ${pollParticipationLabel(poll)}</span>
       </header>
       <div class="${isTextSurvey ? "survey-result-list" : "poll-result-list"}"></div>
     `;
@@ -1105,6 +1153,157 @@ function renderTextSurveyResults(container, poll) {
     `;
     container.appendChild(item);
   });
+}
+
+function galleryAlbums() {
+  return state.gallery?.albums || [];
+}
+
+function activeGalleryAlbum() {
+  if (!state.galleryActiveAlbumId) return null;
+  return galleryAlbums().find((album) => album.id === state.galleryActiveAlbumId) || null;
+}
+
+function maybeLoadGallery() {
+  if (state.activeTab === "gallery" && state.galleryStatus === "idle") {
+    loadGallery();
+  }
+}
+
+async function loadGallery(force = false) {
+  if (!state.apiToken) {
+    state.galleryStatus = "error";
+    state.galleryError = "로그인이 필요합니다.";
+    renderGallery();
+    return;
+  }
+  if (state.galleryStatus === "loading") return;
+  if (!force && state.galleryStatus === "ready") return;
+
+  state.galleryStatus = "loading";
+  state.galleryError = "";
+  renderGallery();
+  try {
+    const gallery = await apiRequest("getGallery", { token: state.apiToken });
+    state.gallery = galleryFromApi(gallery);
+    state.galleryStatus = "ready";
+    if (state.galleryActiveAlbumId && !galleryAlbums().some((album) => album.id === state.galleryActiveAlbumId)) {
+      state.galleryActiveAlbumId = "";
+    }
+    renderGallery();
+  } catch (error) {
+    state.galleryStatus = "error";
+    state.galleryError = error.message || "갤러리를 불러오지 못했습니다.";
+    renderGallery();
+  }
+}
+
+function renderGallery() {
+  const warning = qs("#galleryWarning");
+  const title = qs("#galleryTitle");
+  const status = qs("#galleryStatus");
+  const albumList = qs("#galleryAlbumList");
+  const photoSection = qs("#galleryPhotoSection");
+  const photoList = qs("#galleryPhotoList");
+  if (!warning || !title || !status || !albumList || !photoSection || !photoList) return;
+
+  const gallery = state.gallery;
+  warning.textContent =
+    gallery?.warning ||
+    "이 갤러리의 사진은 동명중 1-1 학급 구성원만 보기 위한 자료입니다. 사진을 저장, 캡처, 외부 공유하지 말아 주세요.";
+  title.textContent = gallery?.rootFolderName || "앨범";
+  albumList.innerHTML = "";
+  photoList.innerHTML = "";
+  photoSection.hidden = true;
+
+  if (state.galleryStatus === "idle") {
+    status.textContent = "갤러리를 불러오는 중입니다.";
+    return;
+  }
+  if (state.galleryStatus === "loading") {
+    status.textContent = "갤러리를 불러오는 중입니다.";
+    return;
+  }
+  if (state.galleryStatus === "error") {
+    status.textContent = state.galleryError || "갤러리를 불러오지 못했습니다.";
+    return;
+  }
+
+  const albums = galleryAlbums();
+  if (!albums.length) {
+    status.textContent = "아직 등록된 앨범이 없습니다.";
+    return;
+  }
+
+  status.textContent = gallery?.updatedAt ? `마지막 업데이트 ${gallery.updatedAt}` : `${albums.length}개 앨범`;
+  albums.forEach((album) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `gallery-album-card ${album.id === state.galleryActiveAlbumId ? "is-active" : ""}`;
+    button.dataset.galleryAlbumId = album.id;
+    button.innerHTML = `
+      <div class="gallery-cover">
+        ${
+          album.coverUrl
+            ? `<img src="${escapeHtml(album.coverUrl)}" alt="" loading="lazy" decoding="async" draggable="false" />`
+            : "<span>사진 없음</span>"
+        }
+      </div>
+      <strong>${escapeHtml(album.title)}</strong>
+      <small>${album.photoCount}장</small>
+    `;
+    albumList.appendChild(button);
+  });
+
+  const album = activeGalleryAlbum();
+  if (!album) return;
+
+  photoSection.hidden = false;
+  qs("#galleryAlbumTitle").textContent = album.title;
+  qs("#galleryAlbumCount").textContent = `${album.photoCount}장`;
+  if (!album.photos.length) {
+    photoList.innerHTML = '<p class="empty-result">이 앨범에는 아직 사진이 없습니다.</p>';
+    return;
+  }
+
+  album.photos.forEach((photo) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "gallery-photo-card";
+    button.dataset.galleryPhotoId = photo.id;
+    button.innerHTML = `
+      <img src="${escapeHtml(photo.thumbnailUrl)}" alt="${escapeHtml(photo.title)}" loading="lazy" decoding="async" draggable="false" />
+      <span>${escapeHtml(photo.title)}</span>
+    `;
+    photoList.appendChild(button);
+  });
+}
+
+function findGalleryPhoto(photoId) {
+  for (const album of galleryAlbums()) {
+    const photo = album.photos.find((entry) => entry.id === photoId);
+    if (photo) return photo;
+  }
+  return null;
+}
+
+function openGalleryPhoto(photoId) {
+  const photo = findGalleryPhoto(photoId);
+  const lightbox = qs("#galleryLightbox");
+  if (!photo || !lightbox) return;
+  qs("#galleryLightboxImage").src = photo.imageUrl;
+  qs("#galleryLightboxImage").alt = photo.title;
+  qs("#galleryLightboxTitle").textContent = photo.title;
+  qs("#galleryLightboxDate").textContent = photo.createdAt || "";
+  lightbox.hidden = false;
+}
+
+function closeGalleryPhoto() {
+  const lightbox = qs("#galleryLightbox");
+  const image = qs("#galleryLightboxImage");
+  if (!lightbox || !image) return;
+  lightbox.hidden = true;
+  image.removeAttribute("src");
 }
 
 function renderAdminSelects() {
@@ -1180,6 +1379,7 @@ function renderAll() {
   renderPoints();
   renderAvatarWorkshop();
   renderPolls();
+  renderGallery();
 }
 
 function syncTitleField() {
@@ -1457,14 +1657,9 @@ async function submitTextSurvey(pollIndex) {
     }
   }
 
-  const existing = poll.responses.find((response) => response.student === state.activeStudent);
-  if (existing) {
-    existing.text = text;
-  } else {
-    poll.responses.push({ student: state.activeStudent, text });
-  }
+  poll.responses.push({ student: state.activeStudent, text });
   renderPolls();
-  showToast("주관식 응답이 저장되었습니다.");
+  showToast("주관식 응답이 추가되었습니다.");
 }
 
 function escapeHtml(value) {
@@ -1549,6 +1744,10 @@ qs("#logoutButton").addEventListener("click", () => {
   }
   state.apiToken = "";
   state.apiStudentId = "";
+  state.gallery = null;
+  state.galleryStatus = "idle";
+  state.galleryError = "";
+  state.galleryActiveAlbumId = "";
   clearSavedSession();
   qs("#studentPassword").value = "";
   setScreen("login");
@@ -1566,6 +1765,45 @@ qsa("[data-jump-tab]").forEach((button) => {
       setAdminPanel(button.dataset.adminPanel);
     }
   });
+});
+
+qs("#galleryRefreshButton").addEventListener("click", () => loadGallery(true));
+
+qs("#galleryAlbumList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-gallery-album-id]");
+  if (!button) return;
+  state.galleryActiveAlbumId = button.dataset.galleryAlbumId;
+  renderGallery();
+});
+
+qs("#galleryPhotoList").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-gallery-photo-id]");
+  if (!button) return;
+  openGalleryPhoto(button.dataset.galleryPhotoId);
+});
+
+qs("#galleryLightboxClose").addEventListener("click", closeGalleryPhoto);
+
+qs("#galleryLightbox").addEventListener("click", (event) => {
+  if (event.target === event.currentTarget) {
+    closeGalleryPhoto();
+  }
+});
+
+qs('[data-tab="gallery"]').addEventListener("contextmenu", (event) => {
+  event.preventDefault();
+});
+
+qs('[data-tab="gallery"]').addEventListener("dragstart", (event) => {
+  if (event.target.matches("img")) {
+    event.preventDefault();
+  }
+});
+
+window.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") {
+    closeGalleryPhoto();
+  }
 });
 
 qsa("[data-notice-filter]").forEach((button) => {
