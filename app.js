@@ -92,8 +92,11 @@ let state = {
   notices: [],
   history: [],
   pointLogs: [],
+  surveyResponses: [],
   polls: [],
   classGoal: null,
+  classGoalHistory: [],
+  detailStudentId: "",
   gallery: null,
   galleryStatus: "idle",
   galleryError: "",
@@ -459,6 +462,32 @@ function classGoalFromApi(goal) {
     rewardName: goal.rewardName || "",
     status: goal.status || "open",
     active: goal.active !== false,
+    updatedAt: goal.updatedAt || "",
+    createdAt: goal.createdAt || "",
+    memo: goal.memo || "",
+  };
+}
+
+function classGoalHistoryFromApi(goals = []) {
+  return goals.map(classGoalFromApi).filter(Boolean);
+}
+
+function goalStatusText(goal) {
+  if (!goal) return "";
+  const status = String(goal.status || "open").toLowerCase();
+  if (goal.active && status !== "closed") return "진행 중";
+  if (status === "closed") return "보관";
+  return status === "open" ? "진행 중" : goal.status;
+}
+
+function surveyResponseFromApi(response) {
+  return {
+    surveyId: response.surveyId || "",
+    studentId: response.studentId || "",
+    optionId: response.optionId || "",
+    textResponse: response.textResponse || "",
+    submittedAt: response.submittedAt || "",
+    updatedAt: response.updatedAt || "",
   };
 }
 
@@ -512,12 +541,20 @@ function applyTeacherPayload(dashboard) {
   if (Array.isArray(dashboard.surveys)) {
     state.polls = dashboard.surveys.map(pollFromApi);
   }
+  if (Array.isArray(dashboard.surveyResponses)) {
+    state.surveyResponses = dashboard.surveyResponses.map(surveyResponseFromApi);
+  }
   if (Array.isArray(dashboard.pointLogs)) {
     state.pointLogs = dashboard.pointLogs.map(pointLogFromApi).sort(comparePointLogDesc);
   }
   if (Object.prototype.hasOwnProperty.call(dashboard, "classGoal")) {
     state.classGoal = classGoalFromApi(dashboard.classGoal);
     syncClassGoalFields();
+  }
+  if (Array.isArray(dashboard.classGoalHistory)) {
+    state.classGoalHistory = classGoalHistoryFromApi(dashboard.classGoalHistory);
+  } else if (state.classGoal) {
+    state.classGoalHistory = [state.classGoal];
   }
   state.apiReady = true;
   if (state.apiToken) {
@@ -1306,6 +1343,160 @@ function closeGalleryPhoto() {
   image.removeAttribute("src");
 }
 
+function renderGoalHistory() {
+  const list = qs("#goalHistoryList");
+  if (!list) return;
+
+  const goals = state.classGoalHistory.length
+    ? state.classGoalHistory
+    : state.classGoal
+      ? [state.classGoal]
+      : [];
+  list.innerHTML = "";
+  if (!goals.length) {
+    list.innerHTML = '<p class="empty-result">아직 기록된 공동 목표가 없습니다.</p>';
+    return;
+  }
+
+  goals.forEach((goal) => {
+    const progress = Math.max(0, Math.min(Number(goal.progress || 0), 100));
+    const item = document.createElement("article");
+    item.className = "goal-history-item";
+    item.innerHTML = `
+      <div class="goal-history-head">
+        <strong>${escapeHtml(goal.title)}</strong>
+        <span>${escapeHtml(goalStatusText(goal))}</span>
+      </div>
+      <div class="goal-progress compact" aria-hidden="true"><i style="--goal-progress: ${progress}%"></i></div>
+      <div class="goal-history-meta">
+        <span>${goal.currentPoints} / ${goal.targetPoints}P</span>
+        <span>${goal.rewardName ? `보상 ${escapeHtml(goal.rewardName)}` : "보상 미입력"}</span>
+      </div>
+      <small>${escapeHtml(goal.updatedAt || goal.createdAt || "")}</small>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function detailStudent() {
+  const selectedId = state.detailStudentId || qs("#detailStudent")?.value || students[0]?.studentId || "";
+  return students.find((student) => student.studentId === selectedId) || students[0] || null;
+}
+
+function renderStudentDetail() {
+  const card = qs("#studentDetailCard");
+  if (!card) return;
+
+  const student = detailStudent();
+  if (!student) {
+    const name = qs("#detailStudentName");
+    if (!name) return;
+    name.textContent = "학생";
+    qs("#detailStudentPoints").textContent = "0P";
+    qs("#detailStudentRank").textContent = "-";
+    qs("#detailStudentLevel").textContent = "Lv.1";
+    qs("#detailStudentTitle").textContent = "-";
+    qs("#detailPointLogs").innerHTML = '<p class="empty-result">표시할 학생이 없습니다.</p>';
+    qs("#detailPrivateNotices").innerHTML = '<p class="empty-result">표시할 학생이 없습니다.</p>';
+    qs("#detailSurveyResponses").innerHTML = '<p class="empty-result">표시할 학생이 없습니다.</p>';
+    return;
+  }
+
+  const studentId = student.studentId;
+  qs("#detailStudentName").textContent = `${student.number}. ${student.name}`;
+  qs("#detailStudentPoints").textContent = `${student.points}P`;
+  qs("#detailStudentRank").textContent = student.rank ? `${student.rank}위` : "-";
+  qs("#detailStudentLevel").textContent = student.level || "Lv.1";
+  qs("#detailStudentTitle").textContent = student.title || "-";
+
+  renderDetailPointLogs(studentId);
+  renderDetailPrivateNotices(studentId);
+  renderDetailSurveyResponses(studentId);
+}
+
+function renderDetailPointLogs(studentId) {
+  const list = qs("#detailPointLogs");
+  if (!list) return;
+  const logs = state.pointLogs.filter((log) => log.studentId === studentId).slice(0, 5);
+  list.innerHTML = "";
+  if (!logs.length) {
+    list.innerHTML = '<p class="empty-result">포인트 기록이 없습니다.</p>';
+    return;
+  }
+  logs.forEach((log) => {
+    const item = document.createElement("article");
+    item.className = "detail-row";
+    item.innerHTML = `
+      <div>
+        <strong>${escapeHtml(log.reason)}</strong>
+        <small>${escapeHtml(log.date)}</small>
+      </div>
+      <b>${formatPointDelta(log.amount)}</b>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function renderDetailPrivateNotices(studentId) {
+  const list = qs("#detailPrivateNotices");
+  const count = qs("#detailPrivateNoticeCount");
+  if (!list || !count) return;
+  const notices = state.notices.filter((notice) => notice.scope === "private" && notice.targetStudentId === studentId);
+  count.textContent = `${notices.length}개`;
+  list.innerHTML = "";
+  if (!notices.length) {
+    list.innerHTML = '<p class="empty-result">개인 공지가 없습니다.</p>';
+    return;
+  }
+  notices.slice(0, 5).forEach((notice) => {
+    const item = document.createElement("article");
+    item.className = "detail-row stacked";
+    item.innerHTML = `
+      <strong>${escapeHtml(notice.title)}</strong>
+      <p>${escapeHtml(notice.body)}</p>
+      <small>${escapeHtml(notice.time)}</small>
+    `;
+    list.appendChild(item);
+  });
+}
+
+function renderDetailSurveyResponses(studentId) {
+  const list = qs("#detailSurveyResponses");
+  const status = qs("#detailSurveyStatus");
+  if (!list || !status) return;
+
+  const rows = state.polls.map((poll) => {
+    const responses = state.surveyResponses.filter((response) => response.surveyId === poll.id && response.studentId === studentId);
+    return { poll, responses };
+  });
+  const answered = rows.filter((row) => row.responses.length).length;
+  status.textContent = `${answered}/${rows.length}개`;
+  list.innerHTML = "";
+  if (!rows.length) {
+    list.innerHTML = '<p class="empty-result">생성된 설문이 없습니다.</p>';
+    return;
+  }
+
+  rows.forEach(({ poll, responses }) => {
+    const item = document.createElement("article");
+    item.className = "detail-row stacked";
+    let detail = "미응답";
+    if (poll.type === "choice" && responses.length) {
+      const latest = responses[0];
+      detail = poll.options.find((option) => option.optionId === latest.optionId)?.text || "응답 완료";
+    } else if (poll.type === "text" && responses.length) {
+      const latest = [...responses].sort((a, b) => String(b.updatedAt || b.submittedAt).localeCompare(String(a.updatedAt || a.submittedAt)))[0];
+      detail = `${responses.length}건 제출${latest?.textResponse ? ` · ${latest.textResponse}` : ""}`;
+    }
+    item.innerHTML = `
+      <strong>${escapeHtml(poll.question)}</strong>
+      <p>${escapeHtml(detail)}</p>
+      <small>${poll.type === "text" ? "주관식" : "투표"}</small>
+    `;
+    list.appendChild(item);
+  });
+}
+
 function renderAdminSelects() {
   const selects = [qs("#noticeTarget"), qs("#pointStudent"), qs("#titleStudent")];
   selects.forEach((select) => {
@@ -1317,7 +1508,25 @@ function renderAdminSelects() {
       select.appendChild(option);
     });
   });
+
+  const detailSelect = qs("#detailStudent");
+  if (detailSelect) {
+    const previous = state.detailStudentId || detailSelect.value;
+    detailSelect.innerHTML = "";
+    students.forEach((student) => {
+      const option = document.createElement("option");
+      option.value = student.studentId || "";
+      option.textContent = `${student.number}. ${student.name}`;
+      detailSelect.appendChild(option);
+    });
+    const nextValue = students.some((student) => student.studentId === previous)
+      ? previous
+      : students[0]?.studentId || "";
+    detailSelect.value = nextValue;
+    state.detailStudentId = nextValue;
+  }
   syncTitleField();
+  renderStudentDetail();
 }
 
 function syncLoginButtonState() {
@@ -1368,6 +1577,10 @@ function setAdminPanel(panel) {
   });
   if (panel === "goal") {
     syncClassGoalFields();
+    renderGoalHistory();
+  }
+  if (panel === "student") {
+    renderStudentDetail();
   }
 }
 
@@ -1380,6 +1593,8 @@ function renderAll() {
   renderAvatarWorkshop();
   renderPolls();
   renderGallery();
+  renderGoalHistory();
+  renderStudentDetail();
 }
 
 function syncTitleField() {
@@ -1405,10 +1620,12 @@ function syncClassGoalFields() {
 
   if (!goal || !goal.targetPoints) {
     summary.textContent = "아직 설정된 공동 목표가 없습니다.";
+    renderGoalHistory();
     return;
   }
 
   summary.textContent = `현재 ${goal.currentPoints}P / 목표 ${goal.targetPoints}P · ${goal.remainingPoints > 0 ? `${goal.remainingPoints}P 남음` : "목표 달성"}`;
+  renderGoalHistory();
 }
 
 async function addNotice() {
@@ -1521,13 +1738,17 @@ async function updateStudentTitle() {
   showToast(`${students[studentIndex].name}님의 칭호를 저장했습니다.`);
 }
 
-async function updateClassGoal() {
+async function saveClassGoal(startNew = false) {
   const title = qs("#goalTitle").value.trim();
   const targetPoints = Number(qs("#goalTargetPoints").value);
   const rewardName = qs("#goalRewardName").value.trim();
 
   if (!title || !targetPoints || targetPoints < 1) {
     showToast("목표 이름과 목표 포인트를 확인해 주세요.");
+    return;
+  }
+
+  if (startNew && state.classGoal && !confirm("현재 공동 목표를 히스토리에 보관하고 새 목표를 시작할까요?")) {
     return;
   }
 
@@ -1539,11 +1760,12 @@ async function updateClassGoal() {
         title,
         targetPoints,
         rewardName,
+        mode: startNew ? "new" : "update",
       });
       applyTeacherPayload(dashboard);
       renderAll();
       syncClassGoalFields();
-      showToast("공동 목표 저장 완료");
+      showToast(startNew ? "새 공동 목표 시작 완료" : "공동 목표 저장 완료");
       return;
     } catch (error) {
       showToast(error.message || "공동 목표 저장에 실패했습니다.");
@@ -1552,17 +1774,39 @@ async function updateClassGoal() {
   }
 
   const currentPoints = students.reduce((sum, student) => sum + Number(student.points || 0), 0);
+  if (startNew && state.classGoal) {
+    state.classGoalHistory.unshift({
+      ...state.classGoal,
+      active: false,
+      status: "closed",
+      updatedAt: "방금",
+    });
+  }
   state.classGoal = classGoalFromApi({
-    goalId: "G001",
+    goalId: startNew ? `G${Date.now()}` : "G001",
     title,
     targetPoints,
     currentPoints,
     rewardName,
     active: true,
+    updatedAt: "방금",
   });
+  if (!startNew) {
+    state.classGoalHistory = [state.classGoal, ...state.classGoalHistory.filter((goal) => goal.goalId !== state.classGoal.goalId)];
+  } else {
+    state.classGoalHistory.unshift(state.classGoal);
+  }
   renderAll();
   syncClassGoalFields();
-  showToast("공동 목표를 저장했습니다.");
+  showToast(startNew ? "새 공동 목표를 시작했습니다." : "공동 목표를 저장했습니다.");
+}
+
+function updateClassGoal() {
+  saveClassGoal(false);
+}
+
+function startNewClassGoal() {
+  saveClassGoal(true);
 }
 
 async function addPoll() {
@@ -1831,6 +2075,11 @@ qs("#addPollButton").addEventListener("click", addPoll);
 qs("#titleStudent").addEventListener("change", syncTitleField);
 qs("#updateTitleButton").addEventListener("click", updateStudentTitle);
 qs("#updateClassGoalButton").addEventListener("click", updateClassGoal);
+qs("#startNewGoalButton").addEventListener("click", startNewClassGoal);
+qs("#detailStudent").addEventListener("change", (event) => {
+  state.detailStudentId = event.target.value;
+  renderStudentDetail();
+});
 
 qs("#pollList").addEventListener("click", async (event) => {
   const submitButton = event.target.closest(".survey-submit");

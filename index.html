@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>동명중 1-1</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./styles.css?v=28" />
+    <link rel="stylesheet" href="./styles.css?v=30" />
   </head>
   <body>
     <div class="app-frame" id="app">
@@ -166,6 +166,14 @@
                   </svg>
                   <span>설문 생성</span>
                 </button>
+                <button class="admin-shortcut" type="button" data-jump-tab="gallery">
+                  <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M4 6h16v12H4V6Z" />
+                    <path d="m7 15 3-3 2 2 3-4 3 5" />
+                    <path d="M8.5 9.5h.1" />
+                  </svg>
+                  <span>갤러리 보기</span>
+                </button>
               </div>
 
               <article class="section-block">
@@ -303,6 +311,7 @@
               <button class="admin-tab" type="button" data-admin-target="points">포인트</button>
               <button class="admin-tab" type="button" data-admin-target="poll">설문</button>
               <button class="admin-tab" type="button" data-admin-target="goal">목표</button>
+              <button class="admin-tab" type="button" data-admin-target="student">학생</button>
             </div>
 
             <article class="admin-panel is-active" data-admin-panel="notice">
@@ -394,6 +403,61 @@
               </label>
               <p class="admin-hint" id="goalCurrentSummary">현재 학급 포인트를 불러오는 중입니다.</p>
               <button class="primary-action" type="button" id="updateClassGoalButton">공동 목표 저장</button>
+              <button class="secondary-action" type="button" id="startNewGoalButton">새 목표로 시작</button>
+
+              <div class="admin-divider"></div>
+              <div class="admin-subtitle">
+                <h3>목표 히스토리</h3>
+                <p>완료하거나 교체한 공동 목표가 순서대로 남습니다.</p>
+              </div>
+              <div class="goal-history-list" id="goalHistoryList"></div>
+            </article>
+
+            <article class="admin-panel" data-admin-panel="student">
+              <label class="field">
+                <span>학생 선택</span>
+                <select id="detailStudent"></select>
+              </label>
+
+              <article class="student-detail-card" id="studentDetailCard">
+                <header>
+                  <div>
+                    <p class="eyebrow">학생 상세</p>
+                    <h3 id="detailStudentName">학생</h3>
+                  </div>
+                  <strong id="detailStudentPoints">0P</strong>
+                </header>
+
+                <div class="detail-metrics">
+                  <span><b id="detailStudentRank">-</b><small>순위</small></span>
+                  <span><b id="detailStudentLevel">Lv.1</b><small>레벨</small></span>
+                  <span><b id="detailStudentTitle">-</b><small>칭호</small></span>
+                </div>
+
+                <div class="detail-section">
+                  <div class="section-title">
+                    <h3>최근 포인트</h3>
+                    <span class="quiet-label">최근 5개</span>
+                  </div>
+                  <div class="detail-list" id="detailPointLogs"></div>
+                </div>
+
+                <div class="detail-section">
+                  <div class="section-title">
+                    <h3>개인 공지</h3>
+                    <span class="quiet-label" id="detailPrivateNoticeCount">0개</span>
+                  </div>
+                  <div class="detail-list" id="detailPrivateNotices"></div>
+                </div>
+
+                <div class="detail-section">
+                  <div class="section-title">
+                    <h3>설문 응답</h3>
+                    <span class="quiet-label" id="detailSurveyStatus">0개</span>
+                  </div>
+                  <div class="detail-list" id="detailSurveyResponses"></div>
+                </div>
+              </article>
             </article>
           </section>
         </main>
@@ -466,6 +530,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=28"></script>
+    <script src="./app.js?v=30"></script>
   </body>
 </html>
