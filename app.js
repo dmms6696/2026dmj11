@@ -101,6 +101,7 @@ let state = {
   galleryStatus: "idle",
   galleryError: "",
   galleryActiveAlbumId: "",
+  isAppLocked: false,
 };
 
 const app = document.querySelector("#app");
@@ -249,6 +250,25 @@ function showToast(message) {
   toast.classList.add("is-visible");
   window.clearTimeout(showToast.timer);
   showToast.timer = window.setTimeout(() => toast.classList.remove("is-visible"), 1800);
+}
+
+function setAppBusy(isBusy, message = "처리 중입니다.") {
+  state.isAppLocked = isBusy;
+  app.classList.toggle("is-busy", isBusy);
+  const lock = qs("#appBusyLock");
+  const label = qs("#appBusyMessage");
+  if (label) label.textContent = message;
+  if (lock) lock.setAttribute("aria-hidden", String(!isBusy));
+}
+
+async function withAppBusy(task, message = "처리 중입니다.") {
+  if (state.isAppLocked) return;
+  setAppBusy(true, message);
+  try {
+    return await task();
+  } finally {
+    setAppBusy(false);
+  }
 }
 
 function isSessionError(error) {
@@ -1922,7 +1942,7 @@ qsa("[data-login-role]").forEach((button) => {
   button.addEventListener("click", () => setLoginRole(button.dataset.loginRole));
 });
 
-qs("#loginButton").addEventListener("click", async () => {
+qs("#loginButton").addEventListener("click", () => withAppBusy(async () => {
   const loginButton = qs("#loginButton");
   loginButton.disabled = true;
   try {
@@ -1980,7 +2000,7 @@ qs("#loginButton").addEventListener("click", async () => {
   setScreen("main");
   setTab("home");
   renderAll();
-});
+}, "로그인 중입니다."));
 
 qs("#logoutButton").addEventListener("click", () => {
   if (state.apiToken) {
@@ -2011,7 +2031,7 @@ qsa("[data-jump-tab]").forEach((button) => {
   });
 });
 
-qs("#galleryRefreshButton").addEventListener("click", () => loadGallery(true));
+qs("#galleryRefreshButton").addEventListener("click", () => withAppBusy(() => loadGallery(true), "갤러리를 새로고침 중입니다."));
 
 qs("#galleryAlbumList").addEventListener("click", (event) => {
   const button = event.target.closest("[data-gallery-album-id]");
@@ -2068,14 +2088,14 @@ qs("#noticeScope").addEventListener("change", (event) => {
   qs(".private-target").classList.toggle("is-active", event.target.value === "private");
 });
 
-qs("#addNoticeButton").addEventListener("click", addNotice);
-qs("#addPointButton").addEventListener("click", addPoints);
+qs("#addNoticeButton").addEventListener("click", () => withAppBusy(addNotice, "공지 저장 중입니다."));
+qs("#addPointButton").addEventListener("click", () => withAppBusy(addPoints, "포인트 저장 중입니다."));
 qs("#pollType").addEventListener("change", syncPollTypeFields);
-qs("#addPollButton").addEventListener("click", addPoll);
+qs("#addPollButton").addEventListener("click", () => withAppBusy(addPoll, "설문 저장 중입니다."));
 qs("#titleStudent").addEventListener("change", syncTitleField);
-qs("#updateTitleButton").addEventListener("click", updateStudentTitle);
-qs("#updateClassGoalButton").addEventListener("click", updateClassGoal);
-qs("#startNewGoalButton").addEventListener("click", startNewClassGoal);
+qs("#updateTitleButton").addEventListener("click", () => withAppBusy(updateStudentTitle, "칭호 저장 중입니다."));
+qs("#updateClassGoalButton").addEventListener("click", () => withAppBusy(updateClassGoal, "공동 목표 저장 중입니다."));
+qs("#startNewGoalButton").addEventListener("click", () => withAppBusy(startNewClassGoal, "새 공동 목표를 시작하는 중입니다."));
 qs("#detailStudent").addEventListener("change", (event) => {
   state.detailStudentId = event.target.value;
   renderStudentDetail();
@@ -2084,7 +2104,7 @@ qs("#detailStudent").addEventListener("change", (event) => {
 qs("#pollList").addEventListener("click", async (event) => {
   const submitButton = event.target.closest(".survey-submit");
   if (submitButton) {
-    submitTextSurvey(Number(submitButton.dataset.pollIndex));
+    withAppBusy(() => submitTextSurvey(Number(submitButton.dataset.pollIndex)), "응답 저장 중입니다.");
     return;
   }
 
@@ -2103,24 +2123,27 @@ qs("#pollList").addEventListener("click", async (event) => {
   }
 
   if (state.apiToken && poll?.id && optionId) {
-    poll.isSubmitting = true;
-    renderPolls();
-    try {
-      const home = await apiRequest("submitSurveyResponse", {
-        token: state.apiToken,
-        surveyId: poll.id,
-        optionId,
-      });
-      applyStudentPayload(home);
-      renderAll();
-      showToast("응답 저장 완료");
-      return;
-    } catch (error) {
-      poll.isSubmitting = false;
+    await withAppBusy(async () => {
+      poll.isSubmitting = true;
       renderPolls();
-      showToast(error.message || "응답 저장에 실패했습니다.");
-      return;
-    }
+      try {
+        const home = await apiRequest("submitSurveyResponse", {
+          token: state.apiToken,
+          surveyId: poll.id,
+          optionId,
+        });
+        applyStudentPayload(home);
+        renderAll();
+        showToast("응답 저장 완료");
+        return;
+      } catch (error) {
+        poll.isSubmitting = false;
+        renderPolls();
+        showToast(error.message || "응답 저장에 실패했습니다.");
+        return;
+      }
+    }, "응답 저장 중입니다.");
+    return;
   }
 
   if (poll.selected !== null) {
@@ -2185,9 +2208,9 @@ async function handleAvatarItemSelect(event) {
   showToast(`${item.name}을 적용했습니다.`);
 }
 
-qs("#baseList").addEventListener("click", handleAvatarItemSelect);
-qs("#clothingList").addEventListener("click", handleAvatarItemSelect);
-qs("#backgroundList").addEventListener("click", handleAvatarItemSelect);
+qs("#baseList").addEventListener("click", (event) => withAppBusy(() => handleAvatarItemSelect(event), "아바타 저장 중입니다."));
+qs("#clothingList").addEventListener("click", (event) => withAppBusy(() => handleAvatarItemSelect(event), "아바타 저장 중입니다."));
+qs("#backgroundList").addEventListener("click", (event) => withAppBusy(() => handleAvatarItemSelect(event), "아바타 저장 중입니다."));
 
 installNetworkLock();
 
