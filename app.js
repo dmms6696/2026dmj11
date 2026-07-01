@@ -621,6 +621,7 @@ async function restoreSavedSession() {
     setScreen("main");
     setTab("home");
     renderAll();
+    setAppBusy(true, "최신 정보를 불러오는 중입니다.");
     usedCachedPayload = true;
   }
 
@@ -651,6 +652,10 @@ async function restoreSavedSession() {
     setScreen("login");
     showToast("로그인 정보가 만료되어 다시 로그인해 주세요.");
     return false;
+  } finally {
+    if (usedCachedPayload) {
+      setAppBusy(false);
+    }
   }
 }
 
