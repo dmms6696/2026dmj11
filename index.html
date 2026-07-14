@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>동명중 1-1</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./styles.css?v=32" />
+    <link rel="stylesheet" href="./styles.css?v=34" />
   </head>
   <body>
     <div class="app-frame" id="app">
@@ -269,7 +269,7 @@
 
           <section class="tab-view" data-tab="gallery">
             <article class="gallery-warning" id="galleryWarning">
-              이 갤러리의 사진은 동명중 1-1 학급 구성원만 보기 위한 자료입니다. 사진을 저장, 캡처, 외부 공유하지 말아 주세요.
+              이 갤러리의 사진과 영상은 동명중 1-1 학급 구성원만 보기 위한 자료입니다. 저장, 캡처, 외부 공유를 하지 말아 주세요.
             </article>
 
             <div class="gallery-head">
@@ -286,18 +286,19 @@
             <article class="section-block gallery-photo-section" id="galleryPhotoSection" hidden>
               <div class="section-title">
                 <h3 id="galleryAlbumTitle">앨범</h3>
-                <span class="quiet-label" id="galleryAlbumCount">0장</span>
+                <span class="quiet-label" id="galleryAlbumCount">0개</span>
               </div>
               <div class="gallery-photo-list" id="galleryPhotoList"></div>
             </article>
 
             <div class="gallery-lightbox" id="galleryLightbox" hidden>
-              <button class="icon-button gallery-close" type="button" id="galleryLightboxClose" aria-label="사진 닫기">
+              <button class="icon-button gallery-close" type="button" id="galleryLightboxClose" aria-label="자료 닫기">
                 <svg viewBox="0 0 24 24" aria-hidden="true">
                   <path d="m6 6 12 12M18 6 6 18" />
                 </svg>
               </button>
               <img id="galleryLightboxImage" alt="" draggable="false" />
+              <iframe id="galleryLightboxFrame" title="" allow="autoplay; fullscreen" allowfullscreen hidden></iframe>
               <div class="gallery-lightbox-caption">
                 <strong id="galleryLightboxTitle"></strong>
                 <small id="galleryLightboxDate"></small>
@@ -537,6 +538,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=32"></script>
+    <script src="./app.js?v=34"></script>
   </body>
 </html>

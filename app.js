@@ -446,7 +446,7 @@ function galleryFromApi(gallery) {
   return {
     warning:
       gallery?.warning ||
-      "이 갤러리의 사진은 동명중 1-1 학급 구성원만 보기 위한 자료입니다. 사진을 저장, 캡처, 외부 공유하지 말아 주세요.",
+      "이 갤러리의 사진과 영상은 동명중 1-1 학급 구성원만 보기 위한 자료입니다. 저장, 캡처, 외부 공유를 하지 말아 주세요.",
     rootFolderName: gallery?.rootFolderName || "우리반 갤러리",
     updatedAt: gallery?.updatedAt || "",
     albums: (gallery?.albums || []).map((album) => ({
@@ -457,12 +457,30 @@ function galleryFromApi(gallery) {
       photos: (album.photos || []).map((photo) => ({
         id: photo.photoId || "",
         title: photo.title || "사진",
+        mediaType: galleryMediaTypeFromApi(photo),
         thumbnailUrl: photo.thumbnailUrl || "",
         imageUrl: photo.imageUrl || photo.thumbnailUrl || "",
+        previewUrl: photo.previewUrl || photo.viewUrl || "",
         createdAt: photo.createdAt || "",
       })),
     })),
   };
+}
+
+function galleryMediaTypeFromApi(photo) {
+  const explicitType = String(photo.mediaType || "").toLowerCase();
+  const mimeType = String(photo.mimeType || "").toLowerCase();
+  const imageUrl = String(photo.imageUrl || "");
+  const previewUrl = String(photo.previewUrl || photo.viewUrl || "");
+  if (explicitType === "video" || mimeType.startsWith("video/")) return "video";
+  if (imageUrl.includes("/preview") || previewUrl.includes("/preview")) return "video";
+  return "image";
+}
+
+function galleryPreviewUrl(photo) {
+  if (photo.previewUrl) return photo.previewUrl;
+  if (photo.imageUrl && photo.imageUrl.includes("/preview")) return photo.imageUrl;
+  return "";
 }
 
 function classGoalFromApi(goal) {
@@ -1272,7 +1290,7 @@ function renderGallery() {
   const gallery = state.gallery;
   warning.textContent =
     gallery?.warning ||
-    "이 갤러리의 사진은 동명중 1-1 학급 구성원만 보기 위한 자료입니다. 사진을 저장, 캡처, 외부 공유하지 말아 주세요.";
+    "이 갤러리의 사진과 영상은 동명중 1-1 학급 구성원만 보기 위한 자료입니다. 저장, 캡처, 외부 공유를 하지 말아 주세요.";
   title.textContent = gallery?.rootFolderName || "앨범";
   albumList.innerHTML = "";
   photoList.innerHTML = "";
@@ -1308,11 +1326,11 @@ function renderGallery() {
         ${
           album.coverUrl
             ? `<img src="${escapeHtml(album.coverUrl)}" alt="" loading="lazy" decoding="async" draggable="false" />`
-            : "<span>사진 없음</span>"
+            : "<span>자료 없음</span>"
         }
       </div>
       <strong>${escapeHtml(album.title)}</strong>
-      <small>${album.photoCount}장</small>
+      <small>${album.photoCount}개</small>
     `;
     albumList.appendChild(button);
   });
@@ -1322,9 +1340,9 @@ function renderGallery() {
 
   photoSection.hidden = false;
   qs("#galleryAlbumTitle").textContent = album.title;
-  qs("#galleryAlbumCount").textContent = `${album.photoCount}장`;
+  qs("#galleryAlbumCount").textContent = `${album.photoCount}개`;
   if (!album.photos.length) {
-    photoList.innerHTML = '<p class="empty-result">이 앨범에는 아직 사진이 없습니다.</p>';
+    photoList.innerHTML = '<p class="empty-result">이 앨범에는 아직 사진이나 영상이 없습니다.</p>';
     return;
   }
 
@@ -1335,6 +1353,7 @@ function renderGallery() {
     button.dataset.galleryPhotoId = photo.id;
     button.innerHTML = `
       <img src="${escapeHtml(photo.thumbnailUrl)}" alt="${escapeHtml(photo.title)}" loading="lazy" decoding="async" draggable="false" />
+      ${photo.mediaType === "video" ? '<b class="media-badge">영상</b>' : ""}
       <span>${escapeHtml(photo.title)}</span>
     `;
     photoList.appendChild(button);
@@ -1353,19 +1372,36 @@ function openGalleryPhoto(photoId) {
   const photo = findGalleryPhoto(photoId);
   const lightbox = qs("#galleryLightbox");
   if (!photo || !lightbox) return;
-  qs("#galleryLightboxImage").src = photo.imageUrl;
-  qs("#galleryLightboxImage").alt = photo.title;
+  const image = qs("#galleryLightboxImage");
+  const frame = qs("#galleryLightboxFrame");
+  if (photo.mediaType === "video") {
+    image.hidden = true;
+    image.removeAttribute("src");
+    frame.hidden = false;
+    frame.src = galleryPreviewUrl(photo);
+    frame.title = photo.title;
+  } else {
+    frame.hidden = true;
+    frame.removeAttribute("src");
+    image.hidden = false;
+    image.src = photo.imageUrl;
+    image.alt = photo.title;
+  }
   qs("#galleryLightboxTitle").textContent = photo.title;
-  qs("#galleryLightboxDate").textContent = photo.createdAt || "";
+  qs("#galleryLightboxDate").textContent = `${photo.mediaType === "video" ? "영상" : "사진"}${photo.createdAt ? ` · ${photo.createdAt}` : ""}`;
   lightbox.hidden = false;
 }
 
 function closeGalleryPhoto() {
   const lightbox = qs("#galleryLightbox");
   const image = qs("#galleryLightboxImage");
-  if (!lightbox || !image) return;
+  const frame = qs("#galleryLightboxFrame");
+  if (!lightbox || !image || !frame) return;
   lightbox.hidden = true;
   image.removeAttribute("src");
+  image.hidden = false;
+  frame.removeAttribute("src");
+  frame.hidden = true;
 }
 
 function renderGoalHistory() {
