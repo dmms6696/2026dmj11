@@ -1,9 +1,9 @@
-const CACHE_NAME = "classroom-hq-v35";
+const CACHE_NAME = "classroom-hq-v36";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=35",
-  "./app.js?v=35",
+  "./styles.css?v=36",
+  "./app.js?v=36",
   "./manifest.json",
   "./icon.svg",
   "./assets/school-logo.png",

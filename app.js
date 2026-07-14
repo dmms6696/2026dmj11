@@ -474,10 +474,13 @@ function galleryFromApi(gallery) {
 function galleryMediaTypeFromApi(photo) {
   const explicitType = String(photo.mediaType || "").toLowerCase();
   const mimeType = String(photo.mimeType || "").toLowerCase();
-  const imageUrl = String(photo.imageUrl || "");
-  const previewUrl = String(photo.previewUrl || photo.viewUrl || "");
-  if (explicitType === "video" || mimeType.startsWith("video/")) return "video";
-  if (imageUrl.includes("/preview") || previewUrl.includes("/preview")) return "video";
+  const fileName = String(photo.fileName || photo.name || photo.title || "").toLowerCase();
+  if (explicitType === "video") return "video";
+  if (explicitType === "image") return "image";
+  if (mimeType.startsWith("video/")) return "video";
+  if (mimeType.startsWith("image/")) return "image";
+  if (photo.videoUrl || photo.downloadUrl) return "video";
+  if (/\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(fileName)) return "video";
   return "image";
 }
 
