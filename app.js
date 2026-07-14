@@ -457,6 +457,7 @@ function galleryFromApi(gallery) {
       photos: (album.photos || []).map((photo) => ({
         id: photo.photoId || "",
         title: photo.title || "사진",
+        fileName: photo.fileName || photo.name || photo.title || "",
         mediaType: galleryMediaTypeFromApi(photo),
         mimeType: photo.mimeType || "",
         thumbnailUrl: photo.thumbnailUrl || "",
@@ -474,20 +475,20 @@ function galleryFromApi(gallery) {
 function galleryMediaTypeFromApi(photo) {
   const explicitType = String(photo.mediaType || "").toLowerCase();
   const mimeType = String(photo.mimeType || "").toLowerCase();
+  const imageUrl = String(photo.imageUrl || "");
   const fileName = String(photo.fileName || photo.name || photo.title || "").toLowerCase();
-  if (explicitType === "video") return "video";
-  if (explicitType === "image") return "image";
   if (mimeType.startsWith("video/")) return "video";
   if (mimeType.startsWith("image/")) return "image";
   if (photo.videoUrl || photo.downloadUrl) return "video";
+  if (imageUrl.includes("/file/d/") && imageUrl.includes("/preview")) return "video";
   if (/\.(mp4|mov|m4v|webm|avi|mkv)$/i.test(fileName)) return "video";
+  if (explicitType === "image") return "image";
+  if (explicitType === "video" && !imageUrl.includes("/thumbnail")) return "video";
   return "image";
 }
 
-function galleryPreviewUrl(photo) {
-  if (photo.previewUrl) return photo.previewUrl;
-  if (photo.imageUrl && photo.imageUrl.includes("/preview")) return photo.imageUrl;
-  return "";
+function isGalleryVideo(photo) {
+  return galleryMediaTypeFromApi(photo) === "video";
 }
 
 function galleryDownloadUrl(photo) {
@@ -495,10 +496,6 @@ function galleryDownloadUrl(photo) {
   if (photo.downloadUrl) return photo.downloadUrl;
   if (photo.id) return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(photo.id)}`;
   return "";
-}
-
-function galleryViewUrl(photo) {
-  return photo.viewUrl || galleryPreviewUrl(photo) || (photo.id ? `https://drive.google.com/file/d/${encodeURIComponent(photo.id)}/view` : "");
 }
 
 function classGoalFromApi(goal) {
@@ -1365,13 +1362,14 @@ function renderGallery() {
   }
 
   album.photos.forEach((photo) => {
+    const isVideo = isGalleryVideo(photo);
     const button = document.createElement("button");
     button.type = "button";
     button.className = "gallery-photo-card";
     button.dataset.galleryPhotoId = photo.id;
     button.innerHTML = `
       <img src="${escapeHtml(photo.thumbnailUrl)}" alt="${escapeHtml(photo.title)}" loading="lazy" decoding="async" draggable="false" />
-      ${photo.mediaType === "video" ? '<b class="media-badge">영상</b>' : ""}
+      ${isVideo ? '<b class="media-badge">영상</b>' : ""}
       <span>${escapeHtml(photo.title)}</span>
     `;
     photoList.appendChild(button);
@@ -1392,65 +1390,69 @@ function openGalleryPhoto(photoId) {
   if (!photo || !lightbox) return;
   const image = qs("#galleryLightboxImage");
   const video = qs("#galleryLightboxVideo");
-  const frame = qs("#galleryLightboxFrame");
-  const openLink = qs("#galleryOpenLink");
-  if (!image || !frame) return;
-  if (photo.mediaType === "video") {
+  const videoToggle = qs("#galleryVideoToggle");
+  if (!image) return;
+  const isVideo = isGalleryVideo(photo);
+  if (isVideo) {
     image.hidden = true;
     image.removeAttribute("src");
     if (video) {
       video.hidden = true;
       video.pause();
       video.removeAttribute("src");
+      video.removeAttribute("controls");
+      video.setAttribute("playsinline", "");
+      video.setAttribute("webkit-playsinline", "");
+      video.onerror = null;
     }
-    frame.hidden = true;
-    frame.removeAttribute("src");
 
     const directUrl = galleryDownloadUrl(photo);
-    const previewUrl = galleryPreviewUrl(photo);
     if (directUrl && video) {
       video.hidden = false;
       video.src = directUrl;
       video.title = photo.title;
+      if (videoToggle) {
+        videoToggle.hidden = false;
+        videoToggle.textContent = "재생";
+      }
+      video.onplay = () => {
+        if (videoToggle) videoToggle.textContent = "일시정지";
+      };
+      video.onpause = () => {
+        if (videoToggle) videoToggle.textContent = "재생";
+      };
+      video.onended = () => {
+        if (videoToggle) videoToggle.textContent = "다시 재생";
+      };
       video.onerror = () => {
         video.hidden = true;
         video.pause();
         video.removeAttribute("src");
-        if (previewUrl) {
-          frame.hidden = false;
-          frame.src = previewUrl;
-          frame.title = photo.title;
-        }
+        if (videoToggle) videoToggle.hidden = true;
+        showToast("영상을 불러오지 못했습니다.");
       };
-    } else if (previewUrl) {
-      frame.hidden = false;
-      frame.src = previewUrl;
-      frame.title = photo.title;
-    }
-
-    const viewUrl = galleryViewUrl(photo);
-    if (openLink) {
-      openLink.href = viewUrl || "#";
-      openLink.hidden = !viewUrl;
     }
   } else {
     if (video) {
       video.hidden = true;
       video.pause();
       video.removeAttribute("src");
+      video.removeAttribute("controls");
+      video.onerror = null;
+      video.onplay = null;
+      video.onpause = null;
+      video.onended = null;
     }
-    frame.hidden = true;
-    frame.removeAttribute("src");
-    if (openLink) {
-      openLink.hidden = true;
-      openLink.removeAttribute("href");
+    if (videoToggle) {
+      videoToggle.hidden = true;
+      videoToggle.textContent = "재생";
     }
     image.hidden = false;
     image.src = photo.imageUrl;
     image.alt = photo.title;
   }
   qs("#galleryLightboxTitle").textContent = photo.title;
-  qs("#galleryLightboxDate").textContent = `${photo.mediaType === "video" ? "영상" : "사진"}${photo.createdAt ? ` · ${photo.createdAt}` : ""}`;
+  qs("#galleryLightboxDate").textContent = `${isVideo ? "영상" : "사진"}${photo.createdAt ? ` · ${photo.createdAt}` : ""}`;
   lightbox.hidden = false;
 }
 
@@ -1458,23 +1460,34 @@ function closeGalleryPhoto() {
   const lightbox = qs("#galleryLightbox");
   const image = qs("#galleryLightboxImage");
   const video = qs("#galleryLightboxVideo");
-  const frame = qs("#galleryLightboxFrame");
-  const openLink = qs("#galleryOpenLink");
-  if (!lightbox || !image || !frame) return;
+  const videoToggle = qs("#galleryVideoToggle");
+  if (!lightbox || !image) return;
   lightbox.hidden = true;
   image.removeAttribute("src");
   image.hidden = false;
   if (video) {
     video.pause();
     video.removeAttribute("src");
+    video.removeAttribute("controls");
     video.onerror = null;
+    video.onplay = null;
+    video.onpause = null;
+    video.onended = null;
     video.hidden = true;
   }
-  frame.removeAttribute("src");
-  frame.hidden = true;
-  if (openLink) {
-    openLink.hidden = true;
-    openLink.removeAttribute("href");
+  if (videoToggle) {
+    videoToggle.hidden = true;
+    videoToggle.textContent = "재생";
+  }
+}
+
+function toggleGalleryVideo() {
+  const video = qs("#galleryLightboxVideo");
+  if (!video || video.hidden || !video.src) return;
+  if (video.paused || video.ended) {
+    video.play().catch(() => showToast("영상을 재생하지 못했습니다."));
+  } else {
+    video.pause();
   }
 }
 
@@ -2163,6 +2176,16 @@ qs("#galleryPhotoList").addEventListener("click", (event) => {
 
 qs("#galleryLightboxClose").addEventListener("click", closeGalleryPhoto);
 
+const galleryVideoToggleButton = qs("#galleryVideoToggle");
+if (galleryVideoToggleButton) {
+  galleryVideoToggleButton.addEventListener("click", toggleGalleryVideo);
+}
+
+const galleryLightboxVideo = qs("#galleryLightboxVideo");
+if (galleryLightboxVideo) {
+  galleryLightboxVideo.addEventListener("click", toggleGalleryVideo);
+}
+
 qs("#galleryLightbox").addEventListener("click", (event) => {
   if (event.target === event.currentTarget) {
     closeGalleryPhoto();
@@ -2331,7 +2354,10 @@ installNetworkLock();
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    navigator.serviceWorker
+      .register("./sw.js", { updateViaCache: "none" })
+      .then((registration) => registration.update())
+      .catch(() => {});
   });
 }
 

@@ -1,9 +1,9 @@
-const CACHE_NAME = "classroom-hq-v36";
+const CACHE_NAME = "classroom-hq-v38";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=36",
-  "./app.js?v=36",
+  "./styles.css?v=38",
+  "./app.js?v=38",
   "./manifest.json",
   "./icon.svg",
   "./assets/school-logo.png",
@@ -49,5 +49,30 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  event.respondWith(caches.match(event.request).then((cached) => cached || fetch(event.request)));
+  const request = event.request;
+  if (request.method !== "GET") return;
+
+  const url = new URL(request.url);
+  const isAppShell =
+    request.mode === "navigate" ||
+    url.pathname.endsWith("/") ||
+    url.pathname.endsWith("/index.html") ||
+    url.pathname.endsWith("/app.js") ||
+    url.pathname.endsWith("/styles.css") ||
+    url.search.includes("v=38");
+
+  if (isAppShell) {
+    event.respondWith(
+      fetch(request)
+        .then((response) => {
+          const copy = response.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+          return response;
+        })
+        .catch(() => caches.match(request).then((cached) => cached || caches.match("./index.html")))
+    );
+    return;
+  }
+
+  event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
 });
