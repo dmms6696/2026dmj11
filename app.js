@@ -58,6 +58,10 @@ const avatarBackgrounds = [
   { id: "school-spring", name: "봄학교 배경", min: 220, desc: "220P부터 해제", asset: "school_spring" },
 ];
 
+const defaultAvatarBases = avatarBases.map((item) => ({ ...item }));
+const defaultAvatarClothing = avatarClothing.map((item) => ({ ...item }));
+const defaultAvatarBackgrounds = avatarBackgrounds.map((item) => ({ ...item }));
+
 const imageAssetVersion = "21";
 const avatarStorageKey = "classroomHqAvatarChoices";
 const profileStorageKey = "classroomHqStudentProfiles";
@@ -138,6 +142,67 @@ function normalizeClothing(clothingId) {
 function normalizeBackground(backgroundId) {
   const nextId = backgroundId || "basic-bg";
   return avatarBackgrounds.some((item) => item.id === nextId) ? nextId : "basic-bg";
+}
+
+function replaceArrayContents(target, items, fallback) {
+  const nextItems = items.length ? items : fallback;
+  target.splice(0, target.length, ...nextItems.map((item) => ({ ...item })));
+}
+
+function clothingAssetByBase(assetKey) {
+  if (!assetKey || !assetKey.includes("/")) return null;
+  return assetKey.split("/").reduce((acc, asset) => {
+    const cleanAsset = asset.trim();
+    if (cleanAsset.startsWith("boy-")) acc.boy = cleanAsset;
+    if (cleanAsset.startsWith("girl-")) acc.girl = cleanAsset;
+    return acc;
+  }, {});
+}
+
+function avatarItemFromApi(item) {
+  const id = item.itemId || item.id || "";
+  const category = String(item.category || "").toLowerCase();
+  const min = Number(item.unlockPoints ?? item.unlock_points ?? item.min ?? 0);
+  const assetKey = String(item.assetKey ?? item.asset_key ?? item.asset ?? "").trim();
+  const next = {
+    id,
+    name: item.name || id || "아이템",
+    min,
+    desc: min > 0 ? `${min}P부터 해제` : item.description || "처음부터 선택 가능",
+    asset: assetKey || null,
+  };
+
+  if (category === "clothing") {
+    const assetByBase = clothingAssetByBase(assetKey);
+    if (assetByBase?.boy || assetByBase?.girl) {
+      next.assetByBase = assetByBase;
+      next.asset = null;
+    }
+  }
+
+  return next;
+}
+
+function applyAvatarItemsFromApi(items = []) {
+  if (!Array.isArray(items) || !items.length) return;
+
+  const groups = {
+    base: [],
+    clothing: [],
+    background: [],
+  };
+
+  items.forEach((item) => {
+    if (item.active === false) return;
+    const id = item.itemId || item.id || "";
+    const category = String(item.category || "").toLowerCase();
+    if (!id || !groups[category]) return;
+    groups[category].push(avatarItemFromApi(item));
+  });
+
+  replaceArrayContents(avatarBases, groups.base, defaultAvatarBases);
+  replaceArrayContents(avatarClothing, groups.clothing, defaultAvatarClothing);
+  replaceArrayContents(avatarBackgrounds, groups.background, defaultAvatarBackgrounds);
 }
 
 function loadAvatarChoices() {
@@ -491,11 +556,19 @@ function isGalleryVideo(photo) {
   return galleryMediaTypeFromApi(photo) === "video";
 }
 
-function galleryDownloadUrl(photo) {
-  if (photo.videoUrl) return photo.videoUrl;
-  if (photo.downloadUrl) return photo.downloadUrl;
-  if (photo.id) return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(photo.id)}`;
-  return "";
+function uniqueUrls(urls) {
+  return urls.filter((url, index, all) => url && all.indexOf(url) === index);
+}
+
+function galleryVideoUrls(photo) {
+  const urls = [];
+  if (photo.id) {
+    const id = encodeURIComponent(photo.id);
+    urls.push(`https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`);
+    urls.push(`https://drive.google.com/uc?export=download&id=${id}&confirm=t`);
+  }
+  urls.push(photo.videoUrl, photo.downloadUrl);
+  return uniqueUrls(urls);
 }
 
 function classGoalFromApi(goal) {
@@ -547,6 +620,8 @@ function surveyResponseFromApi(response) {
 function applyStudentPayload(home) {
   if (!home) return;
 
+  applyAvatarItemsFromApi(home.avatarItems);
+
   if (Array.isArray(home.leaderboard) && home.leaderboard.length) {
     replaceStudentsFromApi(home.leaderboard);
   } else if (home.student) {
@@ -584,6 +659,8 @@ function applyStudentPayload(home) {
 
 function applyTeacherPayload(dashboard) {
   if (!dashboard) return;
+
+  applyAvatarItemsFromApi(dashboard.avatarItems);
 
   if (Array.isArray(dashboard.students)) {
     replaceStudentsFromApi(dashboard.students);
@@ -1041,7 +1118,7 @@ function nextAvatarMilestone(points) {
 }
 
 function avatarImagePath(base, clothing) {
-  const asset = clothing.asset ? `${base.id}-${clothing.asset}` : base.asset;
+  const asset = clothing.assetByBase?.[base.id] || (clothing.asset ? `${base.id}-${clothing.asset}` : base.asset);
   return `./assets/avatars/${asset}.png?v=${imageAssetVersion}`;
 }
 
@@ -1406,10 +1483,24 @@ function openGalleryPhoto(photoId) {
       video.onerror = null;
     }
 
-    const directUrl = galleryDownloadUrl(photo);
-    if (directUrl && video) {
+    const directUrls = galleryVideoUrls(photo);
+    if (directUrls.length && video) {
+      let nextUrlIndex = 0;
+      const loadNextVideoUrl = () => {
+        if (nextUrlIndex >= directUrls.length) {
+          video.hidden = true;
+          video.pause();
+          video.removeAttribute("src");
+          if (videoToggle) videoToggle.hidden = true;
+          showToast("영상을 불러오지 못했습니다.");
+          return;
+        }
+        video.src = directUrls[nextUrlIndex];
+        nextUrlIndex += 1;
+        video.load();
+      };
+
       video.hidden = false;
-      video.src = directUrl;
       video.title = photo.title;
       if (videoToggle) {
         videoToggle.hidden = false;
@@ -1424,13 +1515,10 @@ function openGalleryPhoto(photoId) {
       video.onended = () => {
         if (videoToggle) videoToggle.textContent = "다시 재생";
       };
-      video.onerror = () => {
-        video.hidden = true;
-        video.pause();
-        video.removeAttribute("src");
-        if (videoToggle) videoToggle.hidden = true;
-        showToast("영상을 불러오지 못했습니다.");
-      };
+      video.onerror = loadNextVideoUrl;
+      loadNextVideoUrl();
+    } else {
+      showToast("영상 주소를 찾지 못했습니다.");
     }
   } else {
     if (video) {

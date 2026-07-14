@@ -1,9 +1,9 @@
-const CACHE_NAME = "classroom-hq-v38";
+const CACHE_NAME = "classroom-hq-v39";
 const ASSETS = [
   "./",
   "./index.html",
-  "./styles.css?v=38",
-  "./app.js?v=38",
+  "./styles.css?v=39",
+  "./app.js?v=39",
   "./manifest.json",
   "./icon.svg",
   "./assets/school-logo.png",
@@ -59,7 +59,7 @@ self.addEventListener("fetch", (event) => {
     url.pathname.endsWith("/index.html") ||
     url.pathname.endsWith("/app.js") ||
     url.pathname.endsWith("/styles.css") ||
-    url.search.includes("v=38");
+    url.search.includes("v=39");
 
   if (isAppShell) {
     event.respondWith(
