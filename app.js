@@ -458,9 +458,13 @@ function galleryFromApi(gallery) {
         id: photo.photoId || "",
         title: photo.title || "사진",
         mediaType: galleryMediaTypeFromApi(photo),
+        mimeType: photo.mimeType || "",
         thumbnailUrl: photo.thumbnailUrl || "",
         imageUrl: photo.imageUrl || photo.thumbnailUrl || "",
+        videoUrl: photo.videoUrl || photo.downloadUrl || "",
+        downloadUrl: photo.downloadUrl || "",
         previewUrl: photo.previewUrl || photo.viewUrl || "",
+        viewUrl: photo.viewUrl || photo.previewUrl || "",
         createdAt: photo.createdAt || "",
       })),
     })),
@@ -481,6 +485,17 @@ function galleryPreviewUrl(photo) {
   if (photo.previewUrl) return photo.previewUrl;
   if (photo.imageUrl && photo.imageUrl.includes("/preview")) return photo.imageUrl;
   return "";
+}
+
+function galleryDownloadUrl(photo) {
+  if (photo.videoUrl) return photo.videoUrl;
+  if (photo.downloadUrl) return photo.downloadUrl;
+  if (photo.id) return `https://drive.google.com/uc?export=download&id=${encodeURIComponent(photo.id)}`;
+  return "";
+}
+
+function galleryViewUrl(photo) {
+  return photo.viewUrl || galleryPreviewUrl(photo) || (photo.id ? `https://drive.google.com/file/d/${encodeURIComponent(photo.id)}/view` : "");
 }
 
 function classGoalFromApi(goal) {
@@ -1373,16 +1388,60 @@ function openGalleryPhoto(photoId) {
   const lightbox = qs("#galleryLightbox");
   if (!photo || !lightbox) return;
   const image = qs("#galleryLightboxImage");
+  const video = qs("#galleryLightboxVideo");
   const frame = qs("#galleryLightboxFrame");
+  const openLink = qs("#galleryOpenLink");
+  if (!image || !frame) return;
   if (photo.mediaType === "video") {
     image.hidden = true;
     image.removeAttribute("src");
-    frame.hidden = false;
-    frame.src = galleryPreviewUrl(photo);
-    frame.title = photo.title;
-  } else {
+    if (video) {
+      video.hidden = true;
+      video.pause();
+      video.removeAttribute("src");
+    }
     frame.hidden = true;
     frame.removeAttribute("src");
+
+    const directUrl = galleryDownloadUrl(photo);
+    const previewUrl = galleryPreviewUrl(photo);
+    if (directUrl && video) {
+      video.hidden = false;
+      video.src = directUrl;
+      video.title = photo.title;
+      video.onerror = () => {
+        video.hidden = true;
+        video.pause();
+        video.removeAttribute("src");
+        if (previewUrl) {
+          frame.hidden = false;
+          frame.src = previewUrl;
+          frame.title = photo.title;
+        }
+      };
+    } else if (previewUrl) {
+      frame.hidden = false;
+      frame.src = previewUrl;
+      frame.title = photo.title;
+    }
+
+    const viewUrl = galleryViewUrl(photo);
+    if (openLink) {
+      openLink.href = viewUrl || "#";
+      openLink.hidden = !viewUrl;
+    }
+  } else {
+    if (video) {
+      video.hidden = true;
+      video.pause();
+      video.removeAttribute("src");
+    }
+    frame.hidden = true;
+    frame.removeAttribute("src");
+    if (openLink) {
+      openLink.hidden = true;
+      openLink.removeAttribute("href");
+    }
     image.hidden = false;
     image.src = photo.imageUrl;
     image.alt = photo.title;
@@ -1395,13 +1454,25 @@ function openGalleryPhoto(photoId) {
 function closeGalleryPhoto() {
   const lightbox = qs("#galleryLightbox");
   const image = qs("#galleryLightboxImage");
+  const video = qs("#galleryLightboxVideo");
   const frame = qs("#galleryLightboxFrame");
+  const openLink = qs("#galleryOpenLink");
   if (!lightbox || !image || !frame) return;
   lightbox.hidden = true;
   image.removeAttribute("src");
   image.hidden = false;
+  if (video) {
+    video.pause();
+    video.removeAttribute("src");
+    video.onerror = null;
+    video.hidden = true;
+  }
   frame.removeAttribute("src");
   frame.hidden = true;
+  if (openLink) {
+    openLink.hidden = true;
+    openLink.removeAttribute("href");
+  }
 }
 
 function renderGoalHistory() {

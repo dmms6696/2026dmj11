@@ -9,7 +9,7 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <title>동명중 1-1</title>
     <link rel="manifest" href="./manifest.json" />
-    <link rel="stylesheet" href="./styles.css?v=34" />
+    <link rel="stylesheet" href="./styles.css?v=35" />
   </head>
   <body>
     <div class="app-frame" id="app">
@@ -298,10 +298,12 @@
                 </svg>
               </button>
               <img id="galleryLightboxImage" alt="" draggable="false" />
+              <video id="galleryLightboxVideo" controls playsinline preload="metadata" hidden></video>
               <iframe id="galleryLightboxFrame" title="" allow="autoplay; fullscreen" allowfullscreen hidden></iframe>
               <div class="gallery-lightbox-caption">
                 <strong id="galleryLightboxTitle"></strong>
                 <small id="galleryLightboxDate"></small>
+                <a class="gallery-open-link" id="galleryOpenLink" href="#" target="_blank" rel="noopener" hidden>새 창에서 보기</a>
               </div>
             </div>
           </section>
@@ -538,6 +540,6 @@
       </div>
     </div>
 
-    <script src="./app.js?v=34"></script>
+    <script src="./app.js?v=35"></script>
   </body>
 </html>
