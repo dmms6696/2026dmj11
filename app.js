@@ -563,21 +563,6 @@ function galleryPreviewUrl(photo) {
   return "";
 }
 
-function uniqueUrls(urls) {
-  return urls.filter((url, index, all) => url && all.indexOf(url) === index);
-}
-
-function galleryVideoUrls(photo) {
-  const urls = [];
-  if (photo.id) {
-    const id = encodeURIComponent(photo.id);
-    urls.push(`https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=t`);
-    urls.push(`https://drive.google.com/uc?export=download&id=${id}&confirm=t`);
-  }
-  urls.push(photo.videoUrl, photo.downloadUrl);
-  return uniqueUrls(urls);
-}
-
 function classGoalFromApi(goal) {
   if (!goal) return null;
 
@@ -1511,40 +1496,7 @@ function openGalleryPhoto(photoId) {
       video.setAttribute("webkit-playsinline", "");
       video.onerror = null;
     }
-
-    const directUrls = galleryVideoUrls(photo);
-    if (directUrls.length && video) {
-      let nextUrlIndex = 0;
-      const loadNextVideoUrl = () => {
-        if (nextUrlIndex >= directUrls.length) {
-          showDrivePreview();
-          return;
-        }
-        video.src = directUrls[nextUrlIndex];
-        nextUrlIndex += 1;
-        video.load();
-      };
-
-      video.hidden = false;
-      video.title = photo.title;
-      if (videoToggle) {
-        videoToggle.hidden = false;
-        videoToggle.textContent = "재생";
-      }
-      video.onplay = () => {
-        if (videoToggle) videoToggle.textContent = "일시정지";
-      };
-      video.onpause = () => {
-        if (videoToggle) videoToggle.textContent = "재생";
-      };
-      video.onended = () => {
-        if (videoToggle) videoToggle.textContent = "다시 재생";
-      };
-      video.onerror = loadNextVideoUrl;
-      loadNextVideoUrl();
-    } else {
-      showDrivePreview();
-    }
+    showDrivePreview();
   } else {
     if (frame) {
       frame.hidden = true;
