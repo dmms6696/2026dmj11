@@ -1402,7 +1402,8 @@ textarea:focus {
 }
 
 .gallery-lightbox img,
-.gallery-lightbox video {
+.gallery-lightbox video,
+.gallery-lightbox iframe {
   max-width: min(100%, 900px);
   max-height: 74vh;
   justify-self: center;
@@ -1416,6 +1417,12 @@ textarea:focus {
 
 .gallery-lightbox video {
   width: min(100%, 900px);
+}
+
+.gallery-lightbox iframe {
+  width: min(100%, 900px);
+  height: min(64vh, 560px);
+  border: 0;
 }
 
 .gallery-lightbox video::-webkit-media-controls,

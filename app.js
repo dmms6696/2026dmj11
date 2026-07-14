@@ -556,6 +556,13 @@ function isGalleryVideo(photo) {
   return galleryMediaTypeFromApi(photo) === "video";
 }
 
+function galleryPreviewUrl(photo) {
+  if (photo.previewUrl) return photo.previewUrl;
+  if (photo.imageUrl && photo.imageUrl.includes("/preview")) return photo.imageUrl;
+  if (photo.id) return `https://drive.google.com/file/d/${encodeURIComponent(photo.id)}/preview`;
+  return "";
+}
+
 function uniqueUrls(urls) {
   return urls.filter((url, index, all) => url && all.indexOf(url) === index);
 }
@@ -1468,11 +1475,33 @@ function openGalleryPhoto(photoId) {
   const image = qs("#galleryLightboxImage");
   const video = qs("#galleryLightboxVideo");
   const videoToggle = qs("#galleryVideoToggle");
+  const frame = qs("#galleryLightboxFrame");
   if (!image) return;
   const isVideo = isGalleryVideo(photo);
+  const showDrivePreview = () => {
+    const previewUrl = galleryPreviewUrl(photo);
+    if (!previewUrl || !frame) {
+      showToast("영상을 불러오지 못했습니다.");
+      return;
+    }
+    if (video) {
+      video.hidden = true;
+      video.pause();
+      video.removeAttribute("src");
+    }
+    if (videoToggle) videoToggle.hidden = true;
+    frame.hidden = false;
+    frame.src = previewUrl;
+    frame.title = photo.title;
+  };
+
   if (isVideo) {
     image.hidden = true;
     image.removeAttribute("src");
+    if (frame) {
+      frame.hidden = true;
+      frame.removeAttribute("src");
+    }
     if (video) {
       video.hidden = true;
       video.pause();
@@ -1488,11 +1517,7 @@ function openGalleryPhoto(photoId) {
       let nextUrlIndex = 0;
       const loadNextVideoUrl = () => {
         if (nextUrlIndex >= directUrls.length) {
-          video.hidden = true;
-          video.pause();
-          video.removeAttribute("src");
-          if (videoToggle) videoToggle.hidden = true;
-          showToast("영상을 불러오지 못했습니다.");
+          showDrivePreview();
           return;
         }
         video.src = directUrls[nextUrlIndex];
@@ -1518,9 +1543,13 @@ function openGalleryPhoto(photoId) {
       video.onerror = loadNextVideoUrl;
       loadNextVideoUrl();
     } else {
-      showToast("영상 주소를 찾지 못했습니다.");
+      showDrivePreview();
     }
   } else {
+    if (frame) {
+      frame.hidden = true;
+      frame.removeAttribute("src");
+    }
     if (video) {
       video.hidden = true;
       video.pause();
@@ -1549,6 +1578,7 @@ function closeGalleryPhoto() {
   const image = qs("#galleryLightboxImage");
   const video = qs("#galleryLightboxVideo");
   const videoToggle = qs("#galleryVideoToggle");
+  const frame = qs("#galleryLightboxFrame");
   if (!lightbox || !image) return;
   lightbox.hidden = true;
   image.removeAttribute("src");
@@ -1566,6 +1596,10 @@ function closeGalleryPhoto() {
   if (videoToggle) {
     videoToggle.hidden = true;
     videoToggle.textContent = "재생";
+  }
+  if (frame) {
+    frame.removeAttribute("src");
+    frame.hidden = true;
   }
 }
 
